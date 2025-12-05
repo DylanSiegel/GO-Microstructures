@@ -6,6 +6,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"unique"
@@ -13,8 +14,9 @@ import (
 )
 
 // --- Infrastructure Constants ---
+var CPUThreads = runtime.GOMAXPROCS(0) // Dynamic sizing based on container/host
+
 const (
-	CPUThreads         = 24
 	BaseDir            = "data"
 	PxScale            = 100_000_000.0
 	QtScale            = 100_000_000.0
@@ -31,7 +33,7 @@ var SymbolHandle = unique.Make(func() string {
 	if s := os.Getenv("SYMBOL"); s != "" {
 		return s
 	}
-	return "DOGEUSDT"
+	return "ETHUSDT"
 }())
 
 func Symbol() string { return SymbolHandle.Value() }
@@ -182,15 +184,19 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 		pMatches := pQty + n*4
 		pSide := pMatches + n*2
 
-		if pSide > len(chunk) {
+		// --- SAFETY FIX: Bounds check sideBits explicitly ---
+		// We need ceil(n/8) bytes.
+		neededSideBytes := (n + 7) / 8
+		if pSide+neededSideBytes > len(chunk) {
 			return 0, false
 		}
+		// ----------------------------------------------------
 
 		tDeltas := unsafe.Slice((*int32)(unsafe.Pointer(&chunk[pTime])), n)
 		pDeltas := unsafe.Slice((*int64)(unsafe.Pointer(&chunk[pPrice])), n)
 		qIDs := unsafe.Slice((*uint32)(unsafe.Pointer(&chunk[pQty])), n)
 		ms := unsafe.Slice((*uint16)(unsafe.Pointer(&chunk[pMatches])), n)
-		sideBits := chunk[pSide:]
+		sideBits := chunk[pSide : pSide+neededSideBytes]
 
 		dstT := cols.Times[writePtr : writePtr+n]
 		dstP := cols.Prices[writePtr : writePtr+n]

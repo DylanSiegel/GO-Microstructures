@@ -37,26 +37,46 @@ type MathWorkspace struct {
 	LogRet []float64
 	RawTCI []float64
 
+	// Horizon Calculation Buffers (Prefix Sums + Horizons)
+	PrefixBuf []float64
+	Ret10Buf  []float64
+	Ret100Buf []float64
+
 	// Scratch for sorting/stats (Shared usage)
 	MeanBuf []float64
 	SortBuf []SortPair
 }
 
 func (ws *MathWorkspace) Ensure(n int) {
-	if cap(ws.DT) < n {
-		ws.DT = make([]float64, n)
-		ws.DP = make([]float64, n)
-		ws.LogRet = make([]float64, n)
-		ws.RawTCI = make([]float64, n)
-		ws.MeanBuf = make([]float64, n)
-		// Ensure SortBuf capacity
-		ws.SortBuf = make([]SortPair, n)
+	// n+1 is needed for PrefixBuf to handle the 0th index easily
+	nPlus1 := n + 1
+
+	if cap(ws.DT) < nPlus1 {
+		// Allocating slightly more to cover all arrays with one check
+		ws.DT = make([]float64, nPlus1)
+		ws.DP = make([]float64, nPlus1)
+		ws.LogRet = make([]float64, nPlus1)
+		ws.RawTCI = make([]float64, nPlus1)
+		ws.MeanBuf = make([]float64, nPlus1)
+		ws.PrefixBuf = make([]float64, nPlus1)
+		ws.Ret10Buf = make([]float64, nPlus1)
+		ws.Ret100Buf = make([]float64, nPlus1)
+		ws.SortBuf = make([]SortPair, nPlus1)
 	}
+
 	ws.DT = ws.DT[:n]
 	ws.DP = ws.DP[:n]
 	ws.LogRet = ws.LogRet[:n]
 	ws.RawTCI = ws.RawTCI[:n]
 	ws.MeanBuf = ws.MeanBuf[:n]
+
+	// Prefix needs n+1
+	ws.PrefixBuf = ws.PrefixBuf[:n+1]
+
+	// Horizons map 1:1 with n
+	ws.Ret10Buf = ws.Ret10Buf[:n]
+	ws.Ret100Buf = ws.Ret100Buf[:n]
+
 	ws.SortBuf = ws.SortBuf[:n]
 }
 

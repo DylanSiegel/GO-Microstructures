@@ -116,7 +116,6 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 
 			// Thread-Local Reuse
 			var gncBuf []byte
-			var retBuf []float64
 			localGens := GetCorePrimitives()
 
 			defer func() {
@@ -127,7 +126,7 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 			for taskIdx := range taskChan {
 				t := tasks[taskIdx]
 				res := processDayTask(sym, t, taskIdx, numSignals, numBuckets, stride,
-					cols, sb, ws, &gncBuf, &retBuf, localGens)
+					cols, sb, ws, &gncBuf, localGens)
 				if res != nil {
 					results[taskIdx] = res
 				}
@@ -201,7 +200,7 @@ func shortName(s string) string {
 
 func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stride int,
 	cols *DayColumns, sb *SignalBuffers, ws *MathWorkspace,
-	gncBuf *[]byte, retBuf *[]float64,
+	gncBuf *[]byte,
 	gens []Generator) *TaskResult {
 
 	gncBlob, ok := loadRawGNC(sym, t, gncBuf)
@@ -219,44 +218,41 @@ func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stri
 
 	mathCtx := PrepareMathContext(cols, ws)
 
-	// --- Return Horizons Calculation ---
-	// Reuse retBuf for Ret1
-	if cap(*retBuf) < nRet {
-		*retBuf = make([]float64, nRet)
-	}
-	rets1 := (*retBuf)[:nRet]
-	copy(rets1, mathCtx.LogRet[:nRet])
+	// --- Return Horizons Calculation (Optimized O(N) with Prefix Sums) ---
+	// 1. Calculate 1-tick Returns
+	// Direct access to context buffer, zero copy
+	rets1 := mathCtx.LogRet[:nRet]
 
-	// Create Horizon Views
-	// We allocate locally to keep math logic simple and thread-safe
-	rets10 := make([]float64, nRet)
-	rets100 := make([]float64, nRet)
-
-	// Horizon Calc Loop
+	// 2. Calculate Prefix Sums
+	// prefix[k] = sum(rets1[0]...rets1[k-1])
+	prefix := ws.PrefixBuf[:nRet+1]
+	prefix[0] = 0
+	var sumP float64
 	for i := 0; i < nRet; i++ {
-		// 10-tick lookahead sum
-		sum10 := 0.0
-		lim10 := i + 10
-		if lim10 > nRet {
-			lim10 = nRet
-		}
-		for k := i; k < lim10; k++ {
-			sum10 += rets1[k]
-		}
-		rets10[i] = sum10
-
-		// 100-tick lookahead sum
-		sum100 := 0.0
-		lim100 := i + 100
-		if lim100 > nRet {
-			lim100 = nRet
-		}
-		for k := i; k < lim100; k++ {
-			sum100 += rets1[k]
-		}
-		rets100[i] = sum100
+		sumP += rets1[i]
+		prefix[i+1] = sumP
 	}
-	// -----------------------------------
+
+	// 3. Compute Horizons using Prefix Sums
+	rets10 := ws.Ret10Buf[:nRet]
+	rets100 := ws.Ret100Buf[:nRet]
+
+	for i := 0; i < nRet; i++ {
+		// 10-tick
+		j10 := i + 10
+		if j10 > nRet {
+			j10 = nRet
+		}
+		rets10[i] = prefix[j10] - prefix[i]
+
+		// 100-tick
+		j100 := i + 100
+		if j100 > nRet {
+			j100 = nRet
+		}
+		rets100[i] = prefix[j100] - prefix[i]
+	}
+	// -------------------------------------------------------------------
 
 	if len(sb.Data) < numSignals {
 		sb.Data = make([][]float64, numSignals)

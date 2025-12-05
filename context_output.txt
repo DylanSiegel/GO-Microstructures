@@ -9,6 +9,7 @@
 |-- metrics.go
 |-- test.go
     |-- BTCUSDT/
+    |-- DOGEUSDT/
     |-- ETHUSDT/
     |-- SOLUSDT/
         |-- 2020/
@@ -18,6 +19,18 @@
         |-- 2024/
         |-- 2025/
             |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+        |-- 2020/
+        |-- 2021/
+        |-- 2022/
+        |-- 2023/
+        |-- 2024/
+        |-- 2025/
+            |-- [07..12]/ (6 month dirs)
             |-- [01..12]/ (12 month dirs)
             |-- [01..12]/ (12 month dirs)
             |-- [01..12]/ (12 month dirs)
@@ -69,10 +82,14 @@ import (
 )
 
 type threadContext struct {
-	d  []MathDist
-	fc FeatureCorr
-	s  [][]float64
-	ws *MathWorkspace
+	// Infrastructure
+	ws   *MathWorkspace
+	cols *DayColumns
+
+	// Math Engine
+	gens []Generator
+	sigs [][]float64 // Output buffer: [FeatureIdx][Row]
+
 	// Explicit padding to reduce False Sharing between hot per-thread states.
 	// Sized so that each context occupies at least ~128 bytes on 64-bit targets.
 	_ [120]byte
@@ -81,9 +98,18 @@ type threadContext struct {
 func runBenchmark() {
 	cores := runtime.GOMAXPROCS(0)
 
-	fmt.Println("\n>>> QUANT-GRADE STRESS TEST (SUSTAINED LOAD) <<<")
+	// 1. Setup Dynamic Math Engine
+	coreGens := GetCorePrimitives()
+	featureCount := len(coreGens)
+	featureNames := make([]string, featureCount)
+	for i, g := range coreGens {
+		featureNames[i] = g.Name()
+	}
+
+	fmt.Println("\n>>> QUANT-GRADE STRESS TEST (MODULAR ENGINE) <<<")
 	fmt.Printf("    Hardware: %d Threads | %s / %s | Zen 4 Optimization: ACTIVE\n", cores, runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("    Target  : Zero-Alloc Math Engine + Green Tea GC + AVX-512 Unrolling\n\n")
+	fmt.Printf("    Target  : 7 Core Primitives (Stateful) + Zero-Alloc Context Bridge\n")
+	fmt.Printf("    Signals : %v\n\n", featureNames)
 
 	f, err := os.Create("Benchmark_Elite_Report.txt")
 	if err != nil {
@@ -92,25 +118,32 @@ func runBenchmark() {
 	}
 	defer f.Close()
 
-	// 1. DATA GENERATION
+	// 2. DATA GENERATION
 	rows := 1_000_000
 	fmt.Printf(" [1/5] Generating Synthetic Data (%d rows)... ", rows)
-	cols := generateSyntheticColumns(rows)
-	dists := InitMathDists()
-	fc := InitFeatureCorr()
-	signals := make([][]float64, FeatureCount)
-	for i := range signals {
-		signals[i] = make([]float64, rows)
-	}
 
-	ws := &MathWorkspace{}
+	// We use the Pool to get a clean structure, then populate it
+	benchCols := DayColumnPool.Get().(*DayColumns)
+	generateSyntheticColumns(benchCols, rows)
+
 	fmt.Println("Done.")
 
-	// 2. LATENCY DISTRIBUTION
+	// 3. LATENCY DISTRIBUTION (Jitter Test)
 	fmt.Println(" [2/5] Measuring Tail Latency (Jitter)...")
 	warmup := 5
 	samples := 50
 	latencies := make([]time.Duration, samples)
+
+	// Pre-allocate single thread context for latency test
+	latencyCtx := &threadContext{
+		ws:   &MathWorkspace{},
+		cols: benchCols, // Share the read-only data
+		gens: GetCorePrimitives(),
+		sigs: make([][]float64, featureCount),
+	}
+	for i := range latencyCtx.sigs {
+		latencyCtx.sigs[i] = make([]float64, rows)
+	}
 
 	debug.SetGCPercent(-1)
 	runtime.GC()
@@ -118,12 +151,28 @@ func runBenchmark() {
 
 	for i := 0; i < warmup+samples; i++ {
 		start := time.Now()
-		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+
+		// --- HOT PATH BEGIN ---
+		// 1. The Bridge (Raw -> Fluid)
+		mathCtx := PrepareMathContext(latencyCtx.cols, latencyCtx.ws)
+
+		// 2. The Engine
+		for sIdx, gen := range latencyCtx.gens {
+			gen.Update(mathCtx, latencyCtx.sigs[sIdx])
+		}
+		// --- HOT PATH END ---
+
 		dur := time.Since(start)
 		if i >= warmup {
 			latencies[i-warmup] = dur
 		}
+
+		// Reset generators for next run to ensure identical compute load
+		for _, g := range latencyCtx.gens {
+			g.Reset()
+		}
 	}
+
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	p50 := latencies[samples/2]
 	p99Idx := int(math.Ceil(0.99*float64(samples))) - 1
@@ -132,10 +181,16 @@ func runBenchmark() {
 	}
 	p99 := latencies[p99Idx]
 
-	// 3. THROUGHPUT & BANDWIDTH
+	// 4. THROUGHPUT & BANDWIDTH
 	fmt.Println(" [3/5] Measuring Memory Bandwidth...")
+
+	// Input: Time(8)+Price(8)+Qty(8)+Side(1)+Match(2) = 27 bytes/row
+	// Context: DT(8)+DP(8)+LogRet(8)+RawTCI(8) = 32 bytes/row (Derived)
+	// Output: 7 signals * 8 bytes = 56 bytes/row
+	// Total RW traffic per pass approx: (27 reads) + (32 writes/reads) + (56 writes)
+	// Realistically, we measure "Effective" throughput based on input size.
 	inputBytes := uint64(rows * 27)
-	outputBytes := uint64(rows * FeatureCount * 8)
+	outputBytes := uint64(rows * featureCount * 8)
 	totalBytes := inputBytes + outputBytes
 
 	minDur := latencies[0]
@@ -144,11 +199,15 @@ func runBenchmark() {
 	}
 	gbPerSec := (float64(totalBytes) / minDur.Seconds()) / 1024 / 1024 / 1024
 
-	// 4. GC PAUSE ANALYSIS
+	// 5. GC PAUSE ANALYSIS
 	fmt.Println(" [4/5] Measuring Garbage Collector 'Stop-The-World' Pauses...")
 	var gcStats debug.GCStats
+	// Force some allocations to trigger GC if any exist (though we aim for zero)
 	for i := 0; i < 20; i++ {
-		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+		mathCtx := PrepareMathContext(latencyCtx.cols, latencyCtx.ws)
+		for sIdx, gen := range latencyCtx.gens {
+			gen.Update(mathCtx, latencyCtx.sigs[sIdx])
+		}
 	}
 	debug.ReadGCStats(&gcStats)
 	pauseTotal := gcStats.PauseTotal
@@ -160,22 +219,22 @@ func runBenchmark() {
 		}
 	}
 
-	// 5. SCALABILITY
+	// 6. SCALABILITY (Saturation)
 	fmt.Println(" [5/5] Torture Test: All Cores Saturation (5 Seconds)...")
-	fmt.Println("        (Padding enabled to prevent False Sharing)")
 
-	// OPTIMIZATION: Slice of pointers to ensure heap separation
+	// Prepare threaded contexts
 	contexts := make([]*threadContext, cores)
 	for i := 0; i < cores; i++ {
-		contexts[i] = &threadContext{
-			d:  InitMathDists(),
-			fc: InitFeatureCorr(),
-			s:  make([][]float64, FeatureCount),
-			ws: &MathWorkspace{},
+		ctx := &threadContext{
+			ws:   &MathWorkspace{},
+			cols: benchCols, // They all read the same input memory (good for cache test)
+			gens: GetCorePrimitives(),
+			sigs: make([][]float64, featureCount),
 		}
-		for k := range contexts[i].s {
-			contexts[i].s[k] = make([]float64, rows)
+		for k := range ctx.sigs {
+			ctx.sigs[k] = make([]float64, rows)
 		}
+		contexts[i] = ctx
 	}
 
 	var wg sync.WaitGroup
@@ -186,15 +245,29 @@ func runBenchmark() {
 
 	for i := 0; i < cores; i++ {
 		wg.Add(1)
-		ctx := contexts[i] // Pointer copy
+		ctx := contexts[i]
 		go func() {
 			defer wg.Done()
+			// Localize pointers to avoid pointer chasing in loop
+			myGens := ctx.gens
+			mySigs := ctx.sigs
+			myCols := ctx.cols
+			myWs := ctx.ws
+
 			for {
 				select {
 				case <-stopChan:
 					return
 				default:
-					ComputeFeaturesAndSignals(cols, ctx.d, ctx.s, &ctx.fc, ctx.ws)
+					// Benchmark the full pipeline
+					mathCtx := PrepareMathContext(myCols, myWs)
+					for sIdx, gen := range myGens {
+						gen.Update(mathCtx, mySigs[sIdx])
+					}
+
+					// We don't reset generators inside the hot loop to simulate "streaming"
+					// where state persists, effectively making the test strictly about compute/memory.
+
 					totalBatches.Add(1)
 				}
 			}
@@ -210,11 +283,17 @@ func runBenchmark() {
 	batchesDone := totalBatches.Load()
 	totalEvents := int64(rows) * batchesDone
 	throughputMulti := float64(totalEvents) / durMulti.Seconds()
-	flops := throughputMulti * 150.0 / 1_000_000_000.0
+
+	// Approx FLOPS estimation:
+	// Each row involves exp(), log(), divs, accumulation.
+	// ~50 FLOPs per primitive per row * 7 primitives = 350 FLOPS/row
+	flops := throughputMulti * 350.0 / 1_000_000_000.0
 
 	printEliteReport(os.Stdout, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
 	printEliteReport(f, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
-	DayColumnPool.Put(cols)
+
+	// Cleanup (optional since program ends)
+	DayColumnPool.Put(benchCols)
 }
 
 func printEliteReport(out *os.File, p50, p99 time.Duration, gbps, tput float64, cores, rows int, numGC int64, maxPause, totalPause time.Duration, flops float64) {
@@ -243,54 +322,60 @@ func printEliteReport(out *os.File, p50, p99 time.Duration, gbps, tput float64, 
 	w.Flush()
 }
 
-func generateSyntheticColumns(rows int) *DayColumns {
-	cols := DayColumnPool.Get().(*DayColumns)
+func generateSyntheticColumns(cols *DayColumns, rows int) {
 	cols.Reset()
 
-	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 999))
-
-	baseTime := int64(1704067200000)
-	basePrice := 50000.0
-
+	// Ensure capacity
 	if cap(cols.Times) < rows {
-		cols.Times = make([]int64, 0, rows)
-		cols.Prices = make([]float64, 0, rows)
-		cols.Qtys = make([]float64, 0, rows)
-		cols.Sides = make([]int8, 0, rows)
-		cols.Matches = make([]uint16, 0, rows)
+		cols.Times = make([]int64, rows)
+		cols.Prices = make([]float64, rows)
+		cols.Qtys = make([]float64, rows)
+		cols.Sides = make([]int8, rows)
+		cols.Matches = make([]uint16, rows)
 	}
-
 	cols.Times = cols.Times[:rows]
 	cols.Prices = cols.Prices[:rows]
 	cols.Qtys = cols.Qtys[:rows]
 	cols.Sides = cols.Sides[:rows]
 	cols.Matches = cols.Matches[:rows]
 
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 999))
+
+	baseTime := int64(1704067200000)
+	basePrice := 50000.0
+
+	// Unsafe Pointers for fast generation
 	pTimes := unsafe.SliceData(cols.Times)
 	pPrices := unsafe.SliceData(cols.Prices)
 	pQtys := unsafe.SliceData(cols.Qtys)
 	pSides := unsafe.SliceData(cols.Sides)
 	pMatches := unsafe.SliceData(cols.Matches)
 
-	// //go:nocheckptr
 	for i := 0; i < rows; i++ {
-		*(*int64)(unsafe.Pointer(uintptr(unsafe.Pointer(pTimes)) + uintptr(i)*8)) = baseTime + int64(i*10)
+		// Time increases by 0 to 20ms
+		baseTime += int64(rng.Uint64() % 20)
+		*(*int64)(unsafe.Pointer(uintptr(unsafe.Pointer(pTimes)) + uintptr(i)*8)) = baseTime
 
+		// Random walk price
 		if i > 0 {
 			basePrice += (rng.Float64() - 0.5) * 10.0
 		}
 		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pPrices)) + uintptr(i)*8)) = basePrice
+
+		// Random Qty
 		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pQtys)) + uintptr(i)*8)) = rng.Float64() * 2.0
 
+		// Random Side
 		s := int8(1)
 		if rng.Uint64()&1 == 0 {
 			s = -1
 		}
 		*(*int8)(unsafe.Pointer(uintptr(unsafe.Pointer(pSides)) + uintptr(i)*1)) = s
+
+		// Random matches
 		*(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(pMatches)) + uintptr(i)*2)) = 1
 	}
 	cols.Count = rows
-	return cols
 }
 ```
 
@@ -596,22 +681,17 @@ import (
 	"unsafe"
 )
 
-// --- Shared Configuration ---
-
+// --- Infrastructure Constants ---
 const (
-	CPUThreads = 24
-	BaseDir    = "data"
-
-	// Input Data Layout (GNC-v3)
-	PxScale = 100_000_000.0
-	QtScale = 100_000_000.0
-
-	GNCChunkSize  = 65536
-	GNCMagic      = "GNC3"
-	GNCHeaderSize = 32
-	IdxMagic      = "QIDX"
-	IdxVersion    = 1
-
+	CPUThreads         = 24
+	BaseDir            = "data"
+	PxScale            = 100_000_000.0
+	QtScale            = 100_000_000.0
+	GNCChunkSize       = 65536
+	GNCMagic           = "GNC3"
+	GNCHeaderSize      = 32
+	IdxMagic           = "QIDX"
+	IdxVersion         = 1
 	DefaultDayCapacity = 1_500_000
 )
 
@@ -620,13 +700,13 @@ var SymbolHandle = unique.Make(func() string {
 	if s := os.Getenv("SYMBOL"); s != "" {
 		return s
 	}
-	return "ETHUSDT"
+	return "DOGEUSDT"
 }())
 
 func Symbol() string { return SymbolHandle.Value() }
 
-// --- OPTIMIZED DATA SCHEMA (SoA) ---
-
+// --- RAW DATA SCHEMA (SoA) ---
+// Matches the binary file layout.
 type DayColumns struct {
 	Count               int
 	Times               []int64
@@ -644,6 +724,7 @@ func (c *DayColumns) Reset() {
 	c.ScratchChunkOffsets = c.ScratchChunkOffsets[:0]
 }
 
+// Pool for Raw Data Memory
 var DayColumnPool = sync.Pool{
 	New: func() any {
 		return &DayColumns{
@@ -658,21 +739,7 @@ var DayColumnPool = sync.Pool{
 	},
 }
 
-// SignalBuffers holds fixed feature rows (SoA).
-type SignalBuffers struct {
-	Data [36][]float64
-}
-
-var SignalBufferPool = sync.Pool{
-	New: func() any {
-		sb := &SignalBuffers{}
-		for i := range sb.Data {
-			sb.Data[i] = make([]float64, 0, DefaultDayCapacity)
-		}
-		return sb
-	},
-}
-
+// Helper: Cast slice to bytes for binary writing
 func unsafeBytes[T any](s []T) []byte {
 	if len(s) == 0 {
 		return nil
@@ -681,7 +748,7 @@ func unsafeBytes[T any](s []T) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*elemSize)
 }
 
-// inflateGNCToColumns inflates GNC binary data with integrity checks.
+// inflateGNCToColumns loads the GNC3 blob into DayColumns.
 func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 	if len(rawBlob) < GNCHeaderSize {
 		return 0, false
@@ -770,9 +837,8 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 	cols.Sides = cols.Sides[:totalRows]
 	cols.Matches = cols.Matches[:totalRows]
 
-	// 4. PASS 2: Indexed Writes (Hot Loop)
+	// 4. PASS 2: Indexed Writes
 	writePtr := 0
-
 	for _, off := range chunkOffsets {
 		chunk := rawBlob[off:]
 		n := int(binary.LittleEndian.Uint16(chunk[0:2]))
@@ -795,10 +861,6 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 		ms := unsafe.Slice((*uint16)(unsafe.Pointer(&chunk[pMatches])), n)
 		sideBits := chunk[pSide:]
 
-		if len(sideBits) < (n+7)/8 {
-			return 0, false
-		}
-
 		dstT := cols.Times[writePtr : writePtr+n]
 		dstP := cols.Prices[writePtr : writePtr+n]
 		dstQ := cols.Qtys[writePtr : writePtr+n]
@@ -808,13 +870,10 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 		lastT := baseT
 		lastP := baseP
 
-		// HOT PATH: AVX-512 Friendly
 		for i := 0; i < n; i++ {
 			lastT += int64(tDeltas[i])
 			lastP += pDeltas[i]
 
-			// --- INTEGRITY CHECK ---
-			// Clamp price to positive non-zero to prevent Log(0) or div-by-zero later.
 			finalPrice := float64(lastP) / PxScale
 			if finalPrice <= 1e-9 {
 				finalPrice = 1e-9
@@ -832,7 +891,6 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 
 			dstM[i] = ms[i]
 
-			// Branchless Side Decoding: (bit * 2) - 1
 			b := sideBits[i/8]
 			bit := int8((b >> (i % 8)) & 1)
 			dstS[i] = bit*2 - 1
@@ -1731,335 +1789,332 @@ package main
 
 import (
 	"math"
+	"sync"
 )
 
-// --- Configuration & Globals ---
+// --- Constants & Hyperparameters ---
+const (
+	// Leaky Integrator Decay (Golden Ratio in seconds)
+	TauPressure  = 0.618
+	TauIntensity = 0.618
+	TauVol       = 1.000
 
-var FeatureNames = []string{
-	"TCI", "TCI_abs", "TCI_sign", "TCI_sq",
-	"OFI", "OFI_abs", "OFI_sign", "OFI_sq",
-	"NFI", "NFI_abs", "NFI_sign", "NFI_sq",
-	"Sweep", "Sweep_abs", "Sweep_sign", "Sweep_sq",
-	"SweepDensity", "SweepDensity_abs", "SweepDensity_sign", "SweepDensity_sq",
-	"Pressure", "Pressure_abs", "Pressure_sign", "Pressure_sq",
-	"Velocity", "Velocity_abs", "Velocity_sign", "Velocity_sq",
-	"Resistance", "Resistance_abs", "Resistance_sign", "Resistance_sq",
-	"LogQty", "LogQty_abs", "LogQty_sign", "LogQty_sq",
-}
+	// Kalman Filters
+	KalmanR       = 0.25 // Measurement noise
+	KalmanQStatic = 0.05 // Static process noise rate
+	KalmanQBase   = 0.01 // Adaptive base noise
+	KalmanAlpha   = 5.0  // Adaptive scaling factor for error^2
 
-var FeatureCount = len(FeatureNames)
+	// Regime Shift (CUSUM)
+	CusumDriftK = 0.1 // Drift tolerance
+	CusumResetH = 5.0 // Threshold to declare shift and reset
+)
 
-func MetricFeatureNames() []string { return FeatureNames }
+// --- 1. Math Workspace & Memory ---
 
-// --- Statistical Structures ---
-
-type MathDist struct {
-	Count    float64
-	Min      float64
-	Max      float64
-	Sum      float64
-	SumSq    float64
-	Last     float64
-	Outliers int64 // New: Track soft-clipped values
-}
-
-func InitMathDists() []MathDist {
-	d := make([]MathDist, FeatureCount)
-	for i := range d {
-		d[i].Min = math.MaxFloat64
-		d[i].Max = -math.MaxFloat64
-	}
-	return d
-}
-
-type FeatureCorr struct {
-	Count   float64
-	SumProd []float64
-	SumX    []float64
-	SumSqX  []float64
-}
-
-func InitFeatureCorr() FeatureCorr {
-	return FeatureCorr{
-		SumProd: make([]float64, FeatureCount*FeatureCount),
-		SumX:    make([]float64, FeatureCount),
-		SumSqX:  make([]float64, FeatureCount),
-	}
-}
-
-func BuildFeatureCorrMatrix(fc FeatureCorr) ([][]float64, error) {
-	n := FeatureCount
-	mat := make([][]float64, n)
-	for i := range mat {
-		mat[i] = make([]float64, n)
-	}
-	if fc.Count <= 1 {
-		return mat, nil
-	}
-	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
-			idx := i*n + j
-			meanX := fc.SumX[i] / fc.Count
-			meanY := fc.SumX[j] / fc.Count
-			varX := (fc.SumSqX[i] / fc.Count) - meanX*meanX
-			varY := (fc.SumSqX[j] / fc.Count) - meanY*meanY
-			cov := (fc.SumProd[idx] / fc.Count) - meanX*meanY
-
-			if varX > 1e-18 && varY > 1e-18 {
-				mat[i][j] = cov / (math.Sqrt(varX) * math.Sqrt(varY))
-			} else if i == j {
-				mat[i][j] = 1.0
-			} else {
-				mat[i][j] = 0.0
-			}
-		}
-	}
-	return mat, nil
-}
-
+// SortPair is used for quantile sorting (metrics) but allocated in workspace.
 type SortPair struct {
 	S, R float64
 }
 
 type MathWorkspace struct {
-	OFI     []float64
+	// Pre-calculated vectors (Context)
+	DT     []float64
+	DP     []float64
+	LogRet []float64
+	RawTCI []float64
+
+	// Scratch for sorting/stats (Shared usage)
 	MeanBuf []float64
-	StdBuf  []float64
-	Tmp1    []float64
-	Tmp2    []float64
-	Tmp3    []float64
 	SortBuf []SortPair
 }
 
 func (ws *MathWorkspace) Ensure(n int) {
-	if cap(ws.OFI) < n {
-		ws.OFI = make([]float64, n)
+	if cap(ws.DT) < n {
+		ws.DT = make([]float64, n)
+		ws.DP = make([]float64, n)
+		ws.LogRet = make([]float64, n)
+		ws.RawTCI = make([]float64, n)
 		ws.MeanBuf = make([]float64, n)
-		ws.StdBuf = make([]float64, n)
-		ws.Tmp1 = make([]float64, n)
-		ws.Tmp2 = make([]float64, n)
-		ws.Tmp3 = make([]float64, n)
+		// Ensure SortBuf capacity
+		ws.SortBuf = make([]SortPair, n)
 	}
-	ws.OFI = ws.OFI[:n]
+	ws.DT = ws.DT[:n]
+	ws.DP = ws.DP[:n]
+	ws.LogRet = ws.LogRet[:n]
+	ws.RawTCI = ws.RawTCI[:n]
 	ws.MeanBuf = ws.MeanBuf[:n]
-	ws.StdBuf = ws.StdBuf[:n]
-	ws.Tmp1 = ws.Tmp1[:n]
-	ws.Tmp2 = ws.Tmp2[:n]
-	ws.Tmp3 = ws.Tmp3[:n]
+	ws.SortBuf = ws.SortBuf[:n]
 }
 
-// softClamp applies a Tanh saturation to smoothly bound values.
-// Preserves linearity near zero, compresses tails.
-// Returns: (clampedValue, isOutlier)
-func softClamp(v, limit float64) (float64, bool) {
-	if v > limit {
-		return limit * math.Tanh(v/limit), true
-	}
-	if v < -limit {
-		return limit * math.Tanh(v/limit), true
-	}
-	return v, false
+// Output Buffer Pool
+type SignalBuffers struct {
+	Data [][]float64
 }
 
-func Sign(v float64) float64 {
-	if v == 0 {
-		return 0
-	}
-	return math.Copysign(1, v)
-}
-
-// --- Core Primitive Engine (AggTrades -> Features) ---
-
-func ComputeFeaturesAndSignals(cols *DayColumns, dists []MathDist, signals [][]float64, fc *FeatureCorr, ws *MathWorkspace) {
-	n := cols.Count
-	if n == 0 {
-		return
-	}
-
-	if len(signals) < 36 {
-		panic("signals buffer too small")
-	}
-	for i := 0; i < 36; i++ {
-		if len(signals[i]) < n {
-			panic("signal row buffer too small")
+var SignalBufferPool = sync.Pool{
+	New: func() any {
+		return &SignalBuffers{
+			Data: make([][]float64, 0),
 		}
-	}
+	},
+}
 
-	if ws != nil {
-		ws.Ensure(n)
-	}
+// --- 2. The Bridge: Raw -> Math Context ---
 
-	prices := cols.Prices
-	qtys := cols.Qtys
-	sides := cols.Sides
+type MathContext struct {
+	Count int
+	// Raw (from DayColumns)
+	Prices  []float64
+	Qtys    []float64
+	Sides   []int8
+	Matches []uint16
+	// Derived (calculated in PrepareMathContext)
+	DT     []float64
+	DP     []float64
+	LogRet []float64
+	RawTCI []float64
+}
+
+// PrepareMathContext transforms the rigid DayColumns into the fluid MathContext.
+func PrepareMathContext(cols *DayColumns, ws *MathWorkspace) *MathContext {
+	n := cols.Count
+	ws.Ensure(n)
+
 	times := cols.Times
-	matches := cols.Matches
+	prices := cols.Prices
+	sides := cols.Sides
 
-	s0, s1, s2, s3 := signals[0][:n], signals[1][:n], signals[2][:n], signals[3][:n]
-	s4, s5, s6, s7 := signals[4][:n], signals[5][:n], signals[6][:n], signals[7][:n]
-	s8, s9, s10, s11 := signals[8][:n], signals[9][:n], signals[10][:n], signals[11][:n]
-	s12, s13, s14, s15 := signals[12][:n], signals[13][:n], signals[14][:n], signals[15][:n]
-	s16, s17, s18, s19 := signals[16][:n], signals[17][:n], signals[18][:n], signals[19][:n]
-	s20, s21, s22, s23 := signals[20][:n], signals[21][:n], signals[22][:n], signals[23][:n]
-	s24, s25, s26, s27 := signals[24][:n], signals[25][:n], signals[26][:n], signals[27][:n]
-	s28, s29, s30, s31 := signals[28][:n], signals[29][:n], signals[30][:n], signals[31][:n]
-	s32, s33, s34, s35 := signals[32][:n], signals[33][:n], signals[34][:n], signals[35][:n]
+	// Optimization: Pointers for BCE (Bounds Check Elimination)
+	pDT := ws.DT
+	pDP := ws.DP
+	pRet := ws.LogRet
+	pTci := ws.RawTCI
 
-	const minDTsec = 1e-3
-	const epsBps = 0.0001
-
-	prevP := prices[0]
 	prevT := times[0]
-
-	// Outlier tracking flags for current row
-	var oPress, oVel, oRes bool
+	prevP := prices[0]
+	const minDTsec = 1e-3
 
 	for i := 0; i < n; i++ {
-		p := prices[i]
-		q := qtys[i]
-		s := float64(sides[i])
-		m := float64(matches[i])
+		// 1. Delta Time
 		t := times[i]
-
-		dtRaw := float64(t-prevT) * 0.001
-		if dtRaw < minDTsec {
-			dtRaw = minDTsec
+		dSec := float64(t-prevT) * 0.001
+		if dSec < minDTsec {
+			dSec = minDTsec
 		}
-		dt := dtRaw
+		pDT[i] = dSec
 
-		dP := p - prevP
-		dynamicEps := p * epsBps
+		// 2. Delta Price & Returns
+		p := prices[i]
+		pDP[i] = p - prevP
 
-		// 1) Direction
-		tci := s
-		ofi := s * q
-		nfi := s * q * p
-
-		// 2) Impact
-		sweep := m
-		sweepDensity := 0.0
-		if m > 0 {
-			sweepDensity = q / m
+		if prevP > 0 && p > 0 {
+			pRet[i] = math.Log(p / prevP)
+		} else {
+			pRet[i] = 0
 		}
 
-		// Pressure: Soft Clamp at 5M units/sec
-		// Huge block trades in 1ms can trigger this.
-		pressure, isOP := softClamp(q/dt, 5_000_000.0)
-		oPress = isOP
+		// 3. Raw TCI (Cast int8 to float64)
+		pTci[i] = float64(sides[i])
 
-		// 3) Kinetics
-		// Velocity: Soft Clamp at 20% price move per second
-		velocity, isOV := softClamp(dP/dt, p*0.20)
-		oVel = isOV
-
-		// Resistance: (s*q) / dP
-		denom := dP + math.Copysign(dynamicEps, dP)
-		rawRes := (s * q) / denom
-		// Resistance: Soft Clamp at 1 Billion units/price_unit
-		resistance, isOR := softClamp(rawRes, 1_000_000_000.0)
-		oRes = isOR
-
-		// 4) Texture
-		logQty := math.Log1p(q)
-
-		// Unrolled Writes
-		s0[i] = tci
-		s1[i] = math.Abs(tci)
-		s2[i] = Sign(tci)
-		s3[i] = tci * tci
-
-		s4[i] = ofi
-		s5[i] = math.Abs(ofi)
-		s6[i] = Sign(ofi)
-		s7[i] = ofi * ofi
-
-		s8[i] = nfi
-		s9[i] = math.Abs(nfi)
-		s10[i] = Sign(nfi)
-		s11[i] = nfi * nfi
-
-		s12[i] = sweep
-		s13[i] = math.Abs(sweep)
-		s14[i] = Sign(sweep)
-		s15[i] = sweep * sweep
-
-		s16[i] = sweepDensity
-		s17[i] = math.Abs(sweepDensity)
-		s18[i] = Sign(sweepDensity)
-		s19[i] = sweepDensity * sweepDensity
-
-		s20[i] = pressure
-		s21[i] = math.Abs(pressure)
-		s22[i] = Sign(pressure)
-		s23[i] = pressure * pressure
-
-		s24[i] = velocity
-		s25[i] = math.Abs(velocity)
-		s26[i] = Sign(velocity)
-		s27[i] = velocity * velocity
-
-		s28[i] = resistance
-		s29[i] = math.Abs(resistance)
-		s30[i] = Sign(resistance)
-		s31[i] = resistance * resistance
-
-		s32[i] = logQty
-		s33[i] = math.Abs(logQty)
-		s34[i] = Sign(logQty)
-		s35[i] = logQty * logQty
-
-		prevP = p
 		prevT = t
-
-		// Flag outlier accumulation (done efficiently without branching inside array writes)
-		if oPress {
-			dists[20].Outliers++ // Pressure
-		}
-		if oVel {
-			dists[24].Outliers++ // Velocity
-		}
-		if oRes {
-			dists[28].Outliers++ // Resistance
-		}
+		prevP = p
 	}
 
-	// Update distributions
-	for fIdx := 0; fIdx < FeatureCount; fIdx++ {
-		sig := signals[fIdx]
-		d := &dists[fIdx]
+	return &MathContext{
+		Count:   n,
+		Prices:  prices,
+		Qtys:    cols.Qtys,
+		Sides:   sides,
+		Matches: cols.Matches,
+		DT:      pDT,
+		DP:      pDP,
+		LogRet:  pRet,
+		RawTCI:  pTci,
+	}
+}
 
-		for i := 0; i < n; i++ {
-			val := sig[i]
-			if math.IsNaN(val) || math.IsInf(val, 0) {
-				val = 0
-			}
-			d.Count++
-			d.Sum += val
-			d.SumSq += val * val
-			if val < d.Min {
-				d.Min = val
-			}
-			if val > d.Max {
-				d.Max = val
-			}
-			d.Last = val
+// --- 3. The 7 Survivors (Generators) ---
+
+type Generator interface {
+	Name() string
+	Reset()
+	Update(ctx *MathContext, out []float64)
+}
+
+// 1. Raw TCI (Baseline)
+type GenRawTCI struct{}
+
+func (g *GenRawTCI) Name() string { return "Raw_TCI" }
+func (g *GenRawTCI) Reset()       {}
+func (g *GenRawTCI) Update(ctx *MathContext, out []float64) {
+	copy(out, ctx.RawTCI)
+}
+
+// 2. Static Continuous-Time Kalman
+type GenStaticKalman struct {
+	x, p float64
+}
+
+func (g *GenStaticKalman) Name() string { return "Kalman_Static" }
+func (g *GenStaticKalman) Reset()       { g.x = 0; g.p = 1.0 }
+func (g *GenStaticKalman) Update(ctx *MathContext, out []float64) {
+	x, p := g.x, g.p
+	for i := 0; i < ctx.Count; i++ {
+		p = p + KalmanQStatic*ctx.DT[i]
+		k := p / (p + KalmanR)
+		y := ctx.RawTCI[i]
+		x = x + k*(y-x)
+		p = (1.0 - k) * p
+		out[i] = x
+	}
+	g.x, g.p = x, p
+}
+
+// 3. Adaptive Continuous-Time Kalman
+type GenAdaptiveKalman struct {
+	x, p float64
+}
+
+func (g *GenAdaptiveKalman) Name() string { return "Kalman_Adaptive" }
+func (g *GenAdaptiveKalman) Reset()       { g.x = 0; g.p = 1.0 }
+func (g *GenAdaptiveKalman) Update(ctx *MathContext, out []float64) {
+	x, p := g.x, g.p
+	for i := 0; i < ctx.Count; i++ {
+		errRaw := ctx.RawTCI[i] - x
+		qAdaptive := KalmanQBase + KalmanAlpha*(errRaw*errRaw)
+		p = p + qAdaptive*ctx.DT[i]
+		k := p / (p + KalmanR)
+		x = x + k*errRaw
+		p = (1.0 - k) * p
+		out[i] = x
+	}
+	g.x, g.p = x, p
+}
+
+// 4. Leaky Integrator (Pressure)
+type GenLeakyIntegrator struct {
+	s float64
+}
+
+func (g *GenLeakyIntegrator) Name() string { return "Pressure_TCI" }
+func (g *GenLeakyIntegrator) Reset()       { g.s = 0 }
+func (g *GenLeakyIntegrator) Update(ctx *MathContext, out []float64) {
+	s := g.s
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauPressure)
+		s = ctx.RawTCI[i] + s*decay
+		out[i] = s
+	}
+	g.s = s
+}
+
+// 5. Intensity Imbalance
+type GenIntensityImbalance struct {
+	lamBuy, lamSell float64
+}
+
+func (g *GenIntensityImbalance) Name() string { return "Intensity_Imb" }
+func (g *GenIntensityImbalance) Reset()       { g.lamBuy = 0; g.lamSell = 0 }
+func (g *GenIntensityImbalance) Update(ctx *MathContext, out []float64) {
+	lb, ls := g.lamBuy, g.lamSell
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauIntensity)
+		lb *= decay
+		ls *= decay
+		if ctx.RawTCI[i] > 0 {
+			lb += 1.0
+		} else {
+			ls += 1.0
+		}
+		sum := lb + ls
+		if sum < 1e-9 {
+			out[i] = 0
+		} else {
+			out[i] = (lb - ls) / sum
 		}
 	}
+	g.lamBuy, g.lamSell = lb, ls
+}
 
-	if fc != nil {
-		for i := 0; i < n; i++ {
-			fc.Count++
-			for f1 := 0; f1 < FeatureCount; f1++ {
-				v1 := signals[f1][i]
-				fc.SumX[f1] += v1
-				fc.SumSqX[f1] += v1 * v1
-				for f2 := 0; f2 < FeatureCount; f2++ {
-					v2 := signals[f2][i]
-					fc.SumProd[f1*FeatureCount+f2] += v1 * v2
-				}
+// 6. Instantaneous Volatility
+type GenInstantVol struct {
+	v float64
+}
+
+func (g *GenInstantVol) Name() string { return "Instant_Vol" }
+func (g *GenInstantVol) Reset()       { g.v = 0 }
+func (g *GenInstantVol) Update(ctx *MathContext, out []float64) {
+	v := g.v
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauVol)
+		r := ctx.LogRet[i]
+		v = (r * r) + v*decay
+		out[i] = math.Sqrt(v)
+	}
+	g.v = v
+}
+
+// 7. Regime Shift CUSUM
+type GenCUSUM struct {
+	cPos, cNeg float64
+}
+
+func (g *GenCUSUM) Name() string { return "Regime_CUSUM" }
+func (g *GenCUSUM) Reset()       { g.cPos = 0; g.cNeg = 0 }
+func (g *GenCUSUM) Update(ctx *MathContext, out []float64) {
+	cp, cn := g.cPos, g.cNeg
+	for i := 0; i < ctx.Count; i++ {
+		s := ctx.RawTCI[i]
+		cp = math.Max(0, cp+s-CusumDriftK)
+		cn = math.Min(0, cn+s+CusumDriftK)
+		res := 0.0
+		if cp > CusumResetH {
+			res = 1.0
+			cp = 0
+			cn = 0
+		} else if cn < -CusumResetH {
+			res = -1.0
+			cp = 0
+			cn = 0
+		} else {
+			if cp > -cn {
+				res = cp / CusumResetH
+			} else {
+				res = cn / CusumResetH
 			}
 		}
+		out[i] = res
 	}
+	g.cPos, g.cNeg = cp, cn
+}
+
+// --- Registry ---
+func GetCorePrimitives() []Generator {
+	return []Generator{
+		&GenRawTCI{},
+		&GenStaticKalman{},
+		&GenAdaptiveKalman{},
+		&GenLeakyIntegrator{},
+		&GenIntensityImbalance{},
+		&GenInstantVol{},
+		&GenCUSUM{},
+	}
+}
+
+// --- Statistical Structures (Kept for compatibility with test.go) ---
+type MathDist struct {
+	Count, Min, Max, Sum, SumSq, Last float64
+	Outliers                          int64
+}
+
+func InitMathDists(n int) []MathDist {
+	d := make([]MathDist, n)
+	for i := range d {
+		d[i].Min = math.MaxFloat64
+		d[i].Max = -math.MaxFloat64
+	}
+	return d
 }
 ```
 
@@ -2075,398 +2130,218 @@ import (
 	"slices"
 )
 
-const (
-	// Realistic Taker Fee: 2.5 basis points (0.025%)
-	// This makes PnL calculations meaningful.
-	FeeBps = 2.5
-)
-
+// MetricStats focuses on Signal Physics and Information Content.
 type MetricStats struct {
-	Count        int
-	ICPearson    float64
-	IC_TStat     float64
-	Sharpe       float64
-	HitRate      float64
-	BreakevenBps float64
-	AutoCorr     float64
-	AutoCorrAbs  float64
-	AvgSegLen    float64
-	MaxSegLen    float64
+	Count int
 
-	MeanSig float64
-	StdSig  float64
-	MeanRet float64
-	StdRet  float64
-	MeanPnL float64
-	StdPnL  float64
+	// 1. Predictive Power (Information Coefficient)
+	IC_NextTick float64 // Correlation with next 1 tick return (Microstructure)
+	IC_10Tick   float64 // Correlation with next 10 ticks (Short Trend)
+	IC_100Tick  float64 // Correlation with next 100 ticks (Alpha)
+
+	// 2. Signal Dynamics (Behavior)
+	Autocorrelation float64 // Lag-1 AutoCorr: >0.9=Stable, <0.0=MeanReverting
+	FlipRate        float64 // % of updates where sign changes (Jitter)
+	ActivityRate    float64 // % of time signal is non-zero (Sparsity)
+
+	// 3. Information Quality
+	SignalNoiseRatio float64 // Mean / StdDev (Consistency of bias)
+	OutlierRate      float64 // % of values > 3 sigma
+
+	// 4. Lead/Lag Structure
+	Monotonicity float64 // Rank correlation of Signal vs Return Buckets
 }
 
 type Moments struct {
-	Count          float64
-	SumSig         float64
-	SumRet         float64
-	SumProd        float64
-	SumSqSig       float64
-	SumSqRet       float64
-	SumPnL         float64
-	SumSqPnL       float64
-	Hits           float64
-	ValidHits      float64
-	SumAbsDeltaSig float64
-	SumProdLag     float64
-	SumAbsSig      float64
-	SumAbsProdLag  float64
-	SegCount       float64
-	SegLenTotal    float64
-	SegLenMax      float64
+	Count float64
+
+	// Sums for Correlation (Signal side)
+	SumSig   float64
+	SumSqSig float64
+
+	// Returns at different horizons
+	SumRet1   float64
+	SumSqRet1 float64
+	SumProd1  float64 // Sig * Ret1
+
+	SumRet10   float64
+	SumSqRet10 float64
+	SumProd10  float64 // Sig * Ret10
+
+	SumRet100   float64
+	SumSqRet100 float64
+	SumProd100  float64 // Sig * Ret100
+
+	// Stability Moments
+	SumProdLag1 float64 // Sig[t] * Sig[t-1] (Autocorr)
+	Flips       float64 // Count of sign changes
+	NonZero     float64 // Count of non-zero signals
+	Outliers    float64 // Count of extreme values
 }
 
 func (m *Moments) Add(m2 Moments) {
 	m.Count += m2.Count
 	m.SumSig += m2.SumSig
-	m.SumRet += m2.SumRet
-	m.SumProd += m2.SumProd
 	m.SumSqSig += m2.SumSqSig
-	m.SumSqRet += m2.SumSqRet
-	m.SumPnL += m2.SumPnL
-	m.SumSqPnL += m2.SumSqPnL
-	m.Hits += m2.Hits
-	m.ValidHits += m2.ValidHits
-	m.SumAbsDeltaSig += m2.SumAbsDeltaSig
-	m.SumProdLag += m2.SumProdLag
-	m.SumAbsSig += m2.SumAbsSig
-	m.SumAbsProdLag += m2.SumAbsProdLag
-	m.SegCount += m2.SegCount
-	m.SegLenTotal += m2.SegLenTotal
-	if m2.SegLenMax > m.SegLenMax {
-		m.SegLenMax = m2.SegLenMax
-	}
+
+	m.SumRet1 += m2.SumRet1
+	m.SumSqRet1 += m2.SumSqRet1
+	m.SumProd1 += m2.SumProd1
+
+	m.SumRet10 += m2.SumRet10
+	m.SumSqRet10 += m2.SumSqRet10
+	m.SumProd10 += m2.SumProd10
+
+	m.SumRet100 += m2.SumRet100
+	m.SumSqRet100 += m2.SumSqRet100
+	m.SumProd100 += m2.SumProd100
+
+	m.SumProdLag1 += m2.SumProdLag1
+	m.Flips += m2.Flips
+	m.NonZero += m2.NonZero
+	m.Outliers += m2.Outliers
 }
 
-type DrawdownState struct {
-	CumGross   float64
-	PeakGross  float64
-	MaxDDGross float64
-
-	CumNet   float64
-	PeakNet  float64
-	MaxDDNet float64
-
-	MinNet float64
-	MaxNet float64
-}
-
-type FeeMoments struct {
-	Count    float64
-	SumNet   float64
-	SumSqNet float64
-}
-
-func (fm *FeeMoments) Add(m2 FeeMoments) {
-	fm.Count += m2.Count
-	fm.SumNet += m2.SumNet
-	fm.SumSqNet += m2.SumSqNet
-}
-
-type PnLExtras struct {
-	NetMean    float64
-	NetStd     float64
-	NetSharpe  float64
-	MaxDDGross float64
-	MaxDDNet   float64
-}
-
-func updatePnLPath(sigs, rets []float64, state *DrawdownState, fm *FeeMoments) {
-	n := len(sigs)
-	if n == 0 || len(rets) < n {
-		return
-	}
-
-	prevPos := 0.0
-	// Fee is per unit of turnover.
-	// FeeBps = 2.5 -> 0.00025.
-	// If signal is Z-Score, it's roughly "units of risk".
-	// We assume 1 unit of signal = 1 unit of notional for fee calculation.
-	feePerUnit := FeeBps / 10000.0
-
-	_ = sigs[n-1]
-	_ = rets[n-1]
-
-	firstNet := true
-
-	for i := 0; i < n; i++ {
-		pos := sigs[i]
-		r := rets[i]
-
-		// Gross PnL
-		gross := pos * r
-		state.CumGross += gross
-		if state.CumGross > state.PeakGross {
-			state.PeakGross = state.CumGross
-		}
-		dd := state.PeakGross - state.CumGross
-		if dd > state.MaxDDGross {
-			state.MaxDDGross = dd
-		}
-
-		// Fee on position change
-		dPos := pos - prevPos
-		if dPos < 0 {
-			dPos = -dPos
-		}
-		fee := feePerUnit * dPos
-
-		net := gross - fee
-		state.CumNet += net
-		if state.CumNet > state.PeakNet {
-			state.PeakNet = state.CumNet
-		}
-		ddNet := state.PeakNet - state.CumNet
-		if ddNet > state.MaxDDNet {
-			state.MaxDDNet = ddNet
-		}
-
-		if firstNet {
-			state.MinNet = state.CumNet
-			state.MaxNet = state.CumNet
-			firstNet = false
-		} else {
-			if state.CumNet < state.MinNet {
-				state.MinNet = state.CumNet
-			}
-			if state.CumNet > state.MaxNet {
-				state.MaxNet = state.CumNet
-			}
-		}
-
-		fm.Count++
-		fm.SumNet += net
-		fm.SumSqNet += net * net
-
-		prevPos = pos
-	}
-}
-
-func CalcMomentsVectors(sigs, rets []float64) Moments {
+// CalcMomentsVectors computes physics stats in a single pass.
+func CalcMomentsVectors(sigs, rets1, rets10, rets100 []float64) Moments {
 	var m Moments
 	n := len(sigs)
-	if n == 0 || len(rets) < n {
+	if n == 0 {
 		return m
 	}
 
-	var sumSig, sumRet, sumProd, sumSqSig, sumSqRet, sumPnL, sumSqPnL, sumAbsSig float64
-
-	_ = rets[n-1]
-	_ = sigs[n-1]
-
-	for i := 0; i < n; i++ {
-		s := sigs[i]
-		r := rets[i]
-
-		sumSig += s
-		sumRet += r
-		sumProd += s * r
-		sumSqSig += s * s
-		sumSqRet += r * r
-
-		pnl := s * r
-		sumPnL += pnl
-		sumSqPnL += pnl * pnl
-
-		absS := s
-		if absS < 0 {
-			absS = -absS
-		}
-		sumAbsSig += absS
-	}
-
-	m.Count = float64(n)
-	m.SumSig = sumSig
-	m.SumRet = sumRet
-	m.SumProd = sumProd
-	m.SumSqSig = sumSqSig
-	m.SumSqRet = sumSqRet
-	m.SumPnL = sumPnL
-	m.SumSqPnL = sumSqPnL
-	m.SumAbsSig = sumAbsSig
+	// BCE Hint
+	_ = rets1[n-1]
 
 	var prevSig float64
-	var prevSign float64
-	var curSegLen float64
-
-	var hits, validHits, sumAbsDelta, sumProdLag, sumAbsProdLag float64
-	var segCount, segLenTotal, segLenMax float64
 
 	for i := 0; i < n; i++ {
 		s := sigs[i]
-		r := rets[i]
 
-		if s != 0 && r != 0 {
-			validHits++
-			if (s > 0 && r > 0) || (s < 0 && r < 0) {
-				hits++
-			}
+		m.SumSig += s
+		m.SumSqSig += s * s
+
+		if s != 0 {
+			m.NonZero++
+		}
+		if math.Abs(s) > 3.0 {
+			m.Outliers++
 		}
 
+		// 1-Tick IC
+		r1 := rets1[i]
+		m.SumRet1 += r1
+		m.SumSqRet1 += r1 * r1
+		m.SumProd1 += s * r1
+
+		// 10-Tick IC
+		if i < len(rets10) {
+			r10 := rets10[i]
+			m.SumRet10 += r10
+			m.SumSqRet10 += r10 * r10
+			m.SumProd10 += s * r10
+		}
+
+		// 100-Tick IC
+		if i < len(rets100) {
+			r100 := rets100[i]
+			m.SumRet100 += r100
+			m.SumSqRet100 += r100 * r100
+			m.SumProd100 += s * r100
+		}
+
+		// Dynamics
 		if i > 0 {
-			d := s - prevSig
-			if d < 0 {
-				d = -d
-			}
-			sumAbsDelta += d
-			sumProdLag += s * prevSig
-
-			absPrev := prevSig
-			if absPrev < 0 {
-				absPrev = -absPrev
-			}
-			absS := s
-			if absS < 0 {
-				absS = -absS
-			}
-			sumAbsProdLag += absS * absPrev
-		}
-
-		sign := 0.0
-		if s > 0 {
-			sign = 1.0
-		} else if s < 0 {
-			sign = -1.0
-		}
-
-		if sign != 0 {
-			if prevSign == sign {
-				curSegLen++
-			} else {
-				if curSegLen > 0 {
-					segCount++
-					segLenTotal += curSegLen
-					if curSegLen > segLenMax {
-						segLenMax = curSegLen
-					}
-				}
-				curSegLen = 1
-			}
-		} else {
-			if curSegLen > 0 {
-				segCount++
-				segLenTotal += curSegLen
-				if curSegLen > segLenMax {
-					segLenMax = curSegLen
-				}
-				curSegLen = 0
+			m.SumProdLag1 += s * prevSig
+			// Flip detection: Crossing zero
+			if (s > 0 && prevSig < 0) || (s < 0 && prevSig > 0) {
+				m.Flips++
 			}
 		}
 		prevSig = s
-		prevSign = sign
 	}
-
-	if curSegLen > 0 {
-		segCount++
-		segLenTotal += curSegLen
-		if curSegLen > segLenMax {
-			segLenMax = curSegLen
-		}
-	}
-
-	m.Hits = hits
-	m.ValidHits = validHits
-	m.SumAbsDeltaSig = sumAbsDelta
-	m.SumProdLag = sumProdLag
-	m.SumAbsProdLag = sumAbsProdLag
-	m.SegCount = segCount
-	m.SegLenTotal = segLenTotal
-	m.SegLenMax = segLenMax
-
+	m.Count = float64(n)
 	return m
 }
 
-func FinalizeMetrics(m Moments, dailyICs []float64) MetricStats {
+func FinalizeMetrics(m Moments) MetricStats {
 	if m.Count <= 1 {
-		return MetricStats{Count: int(m.Count)}
-	}
-	ms := MetricStats{Count: int(m.Count)}
-
-	num := m.Count*m.SumProd - m.SumSig*m.SumRet
-	denX := m.Count*m.SumSqSig - m.SumSig*m.SumSig
-	denY := m.Count*m.SumSqRet - m.SumRet*m.SumRet
-	if denX > 0 && denY > 0 {
-		ms.ICPearson = num / math.Sqrt(denX*denY)
+		return MetricStats{}
 	}
 
-	ms.MeanSig = m.SumSig / m.Count
-	varSig := (m.SumSqSig / m.Count) - ms.MeanSig*ms.MeanSig
-	if varSig < 0 {
-		varSig = 0
-	}
-	ms.StdSig = math.Sqrt(varSig)
+	stats := MetricStats{Count: int(m.Count)}
+	N := m.Count
 
-	ms.MeanRet = m.SumRet / m.Count
-	varRet := (m.SumSqRet / m.Count) - ms.MeanRet*ms.MeanRet
-	if varRet < 0 {
-		varRet = 0
-	}
-	ms.StdRet = math.Sqrt(varRet)
-
-	ms.MeanPnL = m.SumPnL / m.Count
-	varPnL := (m.SumSqPnL / m.Count) - ms.MeanPnL*ms.MeanPnL
-	if varPnL < 0 {
-		varPnL = 0
-	}
-	ms.StdPnL = math.Sqrt(varPnL)
-	if varPnL > 1e-18 {
-		ms.Sharpe = ms.MeanPnL / ms.StdPnL
-	}
-
-	if m.ValidHits > 0 {
-		ms.HitRate = m.Hits / m.ValidHits
-	}
-	if m.SumAbsDeltaSig > 1e-18 {
-		ms.BreakevenBps = (m.SumPnL / m.SumAbsDeltaSig) * 10000.0
-	}
-
-	if varSig > 1e-18 {
-		covLag := (m.SumProdLag / m.Count) - ms.MeanSig*ms.MeanSig
-		ms.AutoCorr = covLag / varSig
-	}
-
-	if m.Count > 0 {
-		meanAbs := m.SumAbsSig / m.Count
-		covAbs := (m.SumAbsProdLag / m.Count) - meanAbs*meanAbs
-		varAbs := (m.SumSqSig / m.Count) - meanAbs*meanAbs
-		if varAbs > 1e-18 {
-			ms.AutoCorrAbs = covAbs / varAbs
+	// Helper for Pearson Correlation
+	corr := func(sumX, sumSqX, sumY, sumSqY, sumXY float64) float64 {
+		num := N*sumXY - sumX*sumY
+		denX := N*sumSqX - sumX*sumX
+		denY := N*sumSqY - sumY*sumY
+		if denX <= 1e-18 || denY <= 1e-18 {
+			return 0
 		}
+		return num / math.Sqrt(denX*denY)
 	}
 
-	if m.SegCount > 0 {
-		ms.AvgSegLen = m.SegLenTotal / m.SegCount
-	}
-	ms.MaxSegLen = m.SegLenMax
+	// 1. Prediction (IC)
+	stats.IC_NextTick = corr(m.SumSig, m.SumSqSig, m.SumRet1, m.SumSqRet1, m.SumProd1)
+	stats.IC_10Tick = corr(m.SumSig, m.SumSqSig, m.SumRet10, m.SumSqRet10, m.SumProd10)
+	stats.IC_100Tick = corr(m.SumSig, m.SumSqSig, m.SumRet100, m.SumSqRet100, m.SumProd100)
 
-	if len(dailyICs) > 1 {
-		var sum, sumSq float64
-		n := float64(len(dailyICs))
-		for _, v := range dailyICs {
-			sum += v
-			sumSq += v * v
-		}
-		mean := sum / n
-		variance := (sumSq / n) - mean*mean
-		if variance > 1e-18 {
-			stdDev := math.Sqrt(variance)
-			ms.IC_TStat = mean / (stdDev / math.Sqrt(n))
-		}
-	}
+	// 2. Dynamics
+	// Autocorrelation (Lag-1)
+	// We approximate using SumSig/SumSqSig for Y as well, as Lag-1 shift is negligible for large N
+	stats.Autocorrelation = corr(m.SumSig, m.SumSqSig, m.SumSig, m.SumSqSig, m.SumProdLag1)
 
-	return ms
+	stats.FlipRate = m.Flips / N
+	stats.ActivityRate = m.NonZero / N
+
+	// 3. Quality
+	mean := m.SumSig / N
+	variance := (m.SumSqSig / N) - mean*mean
+	if variance > 0 {
+		stats.SignalNoiseRatio = math.Abs(mean) / math.Sqrt(variance)
+	}
+	stats.OutlierRate = m.Outliers / N
+
+	return stats
 }
+
+// --- Bucket Logic (Monotonicity) ---
 
 type BucketResult struct {
 	ID        int
 	AvgSig    float64
 	AvgRetBps float64
 	Count     int
+}
+
+type BucketAgg struct {
+	Count     int
+	SumSig    float64
+	SumRetBps float64
+}
+
+func (ba *BucketAgg) Add(br BucketResult) {
+	if br.Count <= 0 {
+		return
+	}
+	ba.Count += br.Count
+	ba.SumSig += br.AvgSig * float64(br.Count)
+	ba.SumRetBps += br.AvgRetBps * float64(br.Count)
+}
+
+func (ba BucketAgg) Finalize(id int) BucketResult {
+	if ba.Count == 0 {
+		return BucketResult{ID: id}
+	}
+	den := float64(ba.Count)
+	return BucketResult{
+		ID:        id,
+		AvgSig:    ba.SumSig / den,
+		AvgRetBps: ba.SumRetBps / den,
+		Count:     ba.Count,
+	}
 }
 
 func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scratch *MathWorkspace) []BucketResult {
@@ -2482,7 +2357,6 @@ func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scrat
 	}
 
 	estSize := n / stride
-
 	if cap(scratch.SortBuf) < estSize {
 		scratch.SortBuf = make([]SortPair, estSize)
 	}
@@ -2538,34 +2412,6 @@ func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scrat
 	return results
 }
 
-type BucketAgg struct {
-	Count     int
-	SumSig    float64
-	SumRetBps float64
-}
-
-func (ba *BucketAgg) Add(br BucketResult) {
-	if br.Count <= 0 {
-		return
-	}
-	ba.Count += br.Count
-	ba.SumSig += br.AvgSig * float64(br.Count)
-	ba.SumRetBps += br.AvgRetBps * float64(br.Count)
-}
-
-func (ba BucketAgg) Finalize(id int) BucketResult {
-	if ba.Count == 0 {
-		return BucketResult{ID: id}
-	}
-	den := float64(ba.Count)
-	return BucketResult{
-		ID:        id,
-		AvgSig:    ba.SumSig / den,
-		AvgRetBps: ba.SumRetBps / den,
-		Count:     ba.Count,
-	}
-}
-
 func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	var brs []BucketResult
 	for i, agg := range bucketAggs {
@@ -2589,14 +2435,13 @@ func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	}
 
 	slices.SortFunc(ranks, func(a, b kv) int {
-		switch {
-		case a.val < b.val:
+		if a.val < b.val {
 			return -1
-		case a.val > b.val:
-			return 1
-		default:
-			return 0
 		}
+		if a.val > b.val {
+			return 1
+		}
+		return 0
 	})
 
 	yRank := make([]float64, n)
@@ -2613,27 +2458,6 @@ func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	nf := float64(n)
 	return 1.0 - (6.0*sumD2)/(nf*(nf*nf-1.0))
 }
-
-func summarizeICs(ics []float64) (mean, tstat float64) {
-	n := len(ics)
-	if n == 0 {
-		return 0, 0
-	}
-	var sum, sumSq float64
-	for _, v := range ics {
-		sum += v
-		sumSq += v * v
-	}
-	nf := float64(n)
-	mean = sum / nf
-	variance := (sumSq / nf) - mean*mean
-	if variance <= 1e-18 {
-		return mean, 0
-	}
-	std := math.Sqrt(variance)
-	tstat = mean / (std / math.Sqrt(nf))
-	return
-}
 ```
 
 // --- End File: metrics.go ---
@@ -2641,7 +2465,6 @@ func summarizeICs(ics []float64) (mean, tstat float64) {
 // --- File: test.go ---
 
 ```go
-// --- File: test.go ---
 package main
 
 import (
@@ -2649,8 +2472,8 @@ import (
 	"math"
 	"os"
 	"sort"
-	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 )
 
@@ -2659,37 +2482,20 @@ func writeMetricsLog(f *os.File, msg string) {
 	_, _ = f.WriteString(msg)
 }
 
-var DecayHorizons = []int{1, 5, 10, 50}
-var LatencyHorizonsMs = []int64{10}
-
+// SignalSummary now captures Physics properties
 type SignalSummary struct {
 	Symbol       string
 	SignalName   string
-	ICPearson    float64
-	ICTStat      float64
-	SharpeGross  float64
-	NetSharpe    float64
-	BreakevenBps float64
-	Monotonicity float64
-	MaxDDNet     float64
+	IC_1         float64 // 1-tick Prediction
+	IC_100       float64 // 100-tick Prediction
+	AutoCorr     float64 // Stability
+	FlipRate     float64 // Jitter
+	Monotonicity float64 // Reliability at tails
 }
 
 type DailyStats struct {
 	Moments       Moments
-	IC            float64
 	BucketResults []BucketResult
-
-	DecayICs   []float64
-	LatencyICs []float64
-
-	NetPL_Total float64
-	NetPL_Min   float64
-	NetPL_Max   float64
-	MaxDD_Intra float64
-
-	GrossDD_Max float64
-
-	NetPnLMoments FeeMoments
 }
 
 type TaskResult struct {
@@ -2699,9 +2505,11 @@ type TaskResult struct {
 
 func runTest() {
 	start := time.Now()
-	fmt.Println(">>> UNIFIED STUDY: METRICS + MATH (NORMALIZED + SOFT CLAMP) <<<")
-	// FeeBps is defined in metrics.go, accessible here since same package
-	fmt.Printf("[config] Threads=%d | Fee=%v bps\n", CPUThreads, FeeBps)
+	gens := GetCorePrimitives()
+
+	fmt.Println(">>> UNIFIED STUDY: SIGNAL PHYSICS & DYNAMICS <<<")
+	fmt.Printf("[config] Threads=%d | Signals=%d\n", CPUThreads, len(gens))
+	fmt.Println("[info] Metrics: IC(Horizon), AutoCorr(Stability), Flip%(Jitter), SNR")
 
 	var symbols []string
 	for sym := range discoverSymbols() {
@@ -2711,47 +2519,37 @@ func runTest() {
 		fmt.Printf("[fatal] No symbols found in %s\n", BaseDir)
 		return
 	}
-	fmt.Printf("[init] Found %d symbols: %v\n", len(symbols), symbols)
 
-	reportFile, err := os.Create("Unified_Report_Norm.txt")
+	reportFile, err := os.Create("Unified_Report_Physics.txt")
 	if err != nil {
-		fmt.Printf("[fatal] cannot create Unified_Report_Norm.txt: %v\n", err)
+		fmt.Printf("[fatal] cannot create report: %v\n", err)
 		return
 	}
 	defer reportFile.Close()
-
-	writeMetricsLog(reportFile, fmt.Sprintf("Unified Study (Normalized) Start: %s\n", time.Now().Format(time.RFC3339)))
 
 	totalDays := 0
 	var allSummaries []SignalSummary
 
 	for _, sym := range symbols {
-		banner := fmt.Sprintf("\n%s\n>>> SYMBOL: %s <<<\n%s\n",
-			strings.Repeat("=", 50), sym, strings.Repeat("=", 50))
-		writeMetricsLog(reportFile, banner)
-
+		writeMetricsLog(reportFile, fmt.Sprintf("\n>>> SYMBOL: %s <<<\n", sym))
 		days, summaries := runUnifiedParallel(sym, reportFile)
 		totalDays += days
 		allSummaries = append(allSummaries, summaries...)
 	}
 
-	writeMetricsLog(reportFile, fmt.Sprintf(
-		"\nUnified Study Complete in %s\nTotal Days: %d\n",
-		time.Since(start), totalDays,
-	))
-	fmt.Printf("\n[done] Unified report saved to Unified_Report_Norm.txt\n")
-
-	printWinners(allSummaries)
+	writeMetricsLog(reportFile, fmt.Sprintf("\n[done] Completed in %s | Total Days: %d\n", time.Since(start), totalDays))
+	printPhysicsWinners(allSummaries)
 }
 
 func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 	const numBuckets = 10
 	const stride = 1000
 
-	metricNames := MetricFeatureNames()
-	numSignals := len(metricNames)
-	if numSignals == 0 {
-		return 0, nil
+	generators := GetCorePrimitives()
+	numSignals := len(generators)
+	metricNames := make([]string, numSignals)
+	for i, g := range generators {
+		metricNames[i] = g.Name()
 	}
 
 	var tasks []ofiTask
@@ -2767,10 +2565,6 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 	taskChan := make(chan int, numDays)
 	var wg sync.WaitGroup
 
-	var globalMu sync.Mutex
-	globalMathDists := InitMathDists()
-	globalFeatureCorr := InitFeatureCorr()
-
 	for i := 0; i < numDays; i++ {
 		taskChan <- i
 	}
@@ -2782,59 +2576,25 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 		go func() {
 			defer wg.Done()
 
-			ws := &MathWorkspace{}
+			// Pools
 			cols := DayColumnPool.Get().(*DayColumns)
+			ws := &MathWorkspace{}
 			sb := SignalBufferPool.Get().(*SignalBuffers)
 
-			// Thread-Local Accumulators
-			localDists := InitMathDists()
-			localFC := InitFeatureCorr()
-
+			// Thread-Local Reuse
 			var gncBuf []byte
 			var retBuf []float64
-			var prefixBuf []float64
-			decayBufs := make([][]float64, len(DecayHorizons))
-			latRetBufs := make([][]float64, len(LatencyHorizonsMs))
+			localGens := GetCorePrimitives()
 
 			defer func() {
 				DayColumnPool.Put(cols)
 				SignalBufferPool.Put(sb)
-
-				// Reduce to Global
-				globalMu.Lock()
-				for k := range globalMathDists {
-					dG := &globalMathDists[k]
-					dL := &localDists[k]
-					dG.Count += dL.Count
-					dG.Sum += dL.Sum
-					dG.SumSq += dL.SumSq
-					dG.Outliers += dL.Outliers // Accumulate outlier counts
-					if dL.Min < dG.Min {
-						dG.Min = dL.Min
-					}
-					if dL.Max > dG.Max {
-						dG.Max = dL.Max
-					}
-				}
-				globalFeatureCorr.Count += localFC.Count
-				for k, v := range localFC.SumProd {
-					globalFeatureCorr.SumProd[k] += v
-				}
-				for k, v := range localFC.SumX {
-					globalFeatureCorr.SumX[k] += v
-				}
-				for k, v := range localFC.SumSqX {
-					globalFeatureCorr.SumSqX[k] += v
-				}
-				globalMu.Unlock()
 			}()
 
 			for taskIdx := range taskChan {
 				t := tasks[taskIdx]
 				res := processDayTask(sym, t, taskIdx, numSignals, numBuckets, stride,
-					cols, sb, ws, &gncBuf, &retBuf, &prefixBuf, decayBufs, latRetBufs,
-					localDists, &localFC)
-
+					cols, sb, ws, &gncBuf, &retBuf, localGens)
 				if res != nil {
 					results[taskIdx] = res
 				}
@@ -2846,26 +2606,10 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 
 	// Aggregation
 	globalMoments := make([]Moments, numSignals)
-	dailyICs := make([][]float64, numSignals)
 	bucketAggs := make([][]BucketAgg, numSignals)
 	for i := 0; i < numSignals; i++ {
 		bucketAggs[i] = make([]BucketAgg, numBuckets)
 	}
-
-	decayICs := make([][][]float64, numSignals)
-	for i := 0; i < numSignals; i++ {
-		decayICs[i] = make([][]float64, len(DecayHorizons))
-	}
-	latencyICs := make([][][]float64, numSignals)
-	for i := 0; i < numSignals; i++ {
-		latencyICs[i] = make([][]float64, len(LatencyHorizonsMs))
-	}
-
-	globalFeeMoments := make([]FeeMoments, numSignals)
-	cumNetPL := make([]float64, numSignals)
-	peakNetPL := make([]float64, numSignals)
-	maxDDNet := make([]float64, numSignals)
-	grossMaxDD := make([]float64, numSignals)
 
 	validDays := 0
 	for _, res := range results {
@@ -2873,116 +2617,59 @@ func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
 			continue
 		}
 		validDays++
-
 		for sIdx, stats := range res.Stats {
 			globalMoments[sIdx].Add(stats.Moments)
-
-			if !math.IsNaN(stats.IC) {
-				dailyICs[sIdx] = append(dailyICs[sIdx], stats.IC)
-			}
-
 			for b, br := range stats.BucketResults {
 				if b < len(bucketAggs[sIdx]) {
 					bucketAggs[sIdx][b].Add(br)
 				}
 			}
-
-			for h, val := range stats.DecayICs {
-				if !math.IsNaN(val) {
-					decayICs[sIdx][h] = append(decayICs[sIdx][h], val)
-				}
-			}
-			for l, val := range stats.LatencyICs {
-				if !math.IsNaN(val) {
-					latencyICs[sIdx][l] = append(latencyICs[sIdx][l], val)
-				}
-			}
-
-			globalFeeMoments[sIdx].Add(stats.NetPnLMoments)
-
-			startLevel := cumNetPL[sIdx]
-
-			dayHighAbs := startLevel + stats.NetPL_Max
-			if dayHighAbs > peakNetPL[sIdx] {
-				peakNetPL[sIdx] = dayHighAbs
-			}
-
-			dayLowAbs := startLevel + stats.NetPL_Min
-			currentDD := peakNetPL[sIdx] - dayLowAbs
-			if currentDD > maxDDNet[sIdx] {
-				maxDDNet[sIdx] = currentDD
-			}
-
-			if stats.MaxDD_Intra > maxDDNet[sIdx] {
-				maxDDNet[sIdx] = stats.MaxDD_Intra
-			}
-
-			cumNetPL[sIdx] += stats.NetPL_Total
-
-			if stats.GrossDD_Max > grossMaxDD[sIdx] {
-				grossMaxDD[sIdx] = stats.GrossDD_Max
-			}
 		}
 	}
 
-	writeMetricsLog(report, fmt.Sprintf("      Processed %d days (Parallel).\n", validDays))
-
 	summaries := make([]SignalSummary, 0, numSignals)
 
+	// PHYSICS REPORT HEADER
+	w := tabwriter.NewWriter(report, 0, 0, 1, ' ', 0)
+	fmt.Fprintln(w, "SIGNAL\tIC(1)\tIC(10)\tIC(100)\tAUTO\tFLIP%\tMONO\tSNR")
+	fmt.Fprintln(w, "------\t-----\t------\t-------\t----\t-----\t----\t---")
+
 	for sIdx, sigName := range metricNames {
-		stats := FinalizeMetrics(globalMoments[sIdx], dailyICs[sIdx])
-		title := fmt.Sprintf("%s | %s", sym, sigName)
+		stats := FinalizeMetrics(globalMoments[sIdx])
 		mono := ComputeBucketMonotonicity(bucketAggs[sIdx])
 
-		fm := globalFeeMoments[sIdx]
-		var netMean, netStd, netSharpe float64
-		if fm.Count > 0 {
-			netMean = fm.SumNet / fm.Count
-			variance := (fm.SumSqNet / fm.Count) - netMean*netMean
-			if variance < 0 {
-				variance = 0
-			}
-			netStd = math.Sqrt(variance)
-			if variance > 1e-18 && netStd > 0 {
-				netSharpe = netMean / netStd
-			}
-		}
-
-		extras := PnLExtras{
-			NetMean:    netMean,
-			NetStd:     netStd,
-			NetSharpe:  netSharpe,
-			MaxDDGross: grossMaxDD[sIdx],
-			MaxDDNet:   maxDDNet[sIdx],
-		}
-
-		printMetricsReport(title, report, stats, bucketAggs[sIdx],
-			DecayHorizons, decayICs[sIdx], LatencyHorizonsMs, latencyICs[sIdx], mono, extras)
+		fmt.Fprintf(w, "%s\t%.4f\t%.4f\t%.4f\t%.3f\t%.1f%%\t%.2f\t%.2f\n",
+			shortName(sigName),
+			stats.IC_NextTick, stats.IC_10Tick, stats.IC_100Tick,
+			stats.Autocorrelation, stats.FlipRate*100, mono, stats.SignalNoiseRatio)
 
 		summaries = append(summaries, SignalSummary{
 			Symbol:       sym,
 			SignalName:   sigName,
-			ICPearson:    stats.ICPearson,
-			ICTStat:      stats.IC_TStat,
-			SharpeGross:  stats.Sharpe,
-			NetSharpe:    extras.NetSharpe,
-			BreakevenBps: stats.BreakevenBps,
+			IC_1:         stats.IC_NextTick,
+			IC_100:       stats.IC_100Tick,
+			AutoCorr:     stats.Autocorrelation,
+			FlipRate:     stats.FlipRate,
 			Monotonicity: mono,
-			MaxDDNet:     extras.MaxDDNet,
 		})
 	}
-
-	printMathReport(report, globalMathDists)
-	corrMat, _ := BuildFeatureCorrMatrix(globalFeatureCorr)
-	printFeatureCorrMatrix(report, corrMat)
+	w.Flush()
+	fmt.Fprintln(report, "")
 
 	return validDays, summaries
 }
 
+func shortName(s string) string {
+	if len(s) > 20 {
+		return s[:17] + "..."
+	}
+	return s
+}
+
 func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stride int,
 	cols *DayColumns, sb *SignalBuffers, ws *MathWorkspace,
-	gncBuf *[]byte, retBuf *[]float64, prefixBuf *[]float64, decayBufs, latRetBufs [][]float64,
-	dists []MathDist, fc *FeatureCorr) *TaskResult {
+	gncBuf *[]byte, retBuf *[]float64,
+	gens []Generator) *TaskResult {
 
 	gncBlob, ok := loadRawGNC(sym, t, gncBuf)
 	if !ok || len(gncBlob) == 0 {
@@ -2997,87 +2684,50 @@ func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stri
 	n := rowCount
 	nRet := n - 1
 
-	prices := cols.Prices
-	times := cols.Times
+	mathCtx := PrepareMathContext(cols, ws)
 
+	// --- Return Horizons Calculation ---
+	// Reuse retBuf for Ret1
 	if cap(*retBuf) < nRet {
 		*retBuf = make([]float64, nRet)
 	}
-	rets := (*retBuf)[:nRet]
+	rets1 := (*retBuf)[:nRet]
+	copy(rets1, mathCtx.LogRet[:nRet])
 
-	// Returns Calculation (Log Returns)
+	// Create Horizon Views
+	// We allocate locally to keep math logic simple and thread-safe
+	rets10 := make([]float64, nRet)
+	rets100 := make([]float64, nRet)
+
+	// Horizon Calc Loop
 	for i := 0; i < nRet; i++ {
-		p0 := prices[i]
-		p1 := prices[i+1]
-		if p0 > 0 && p1 > 0 {
-			rets[i] = math.Log(p1 / p0)
-		} else {
-			rets[i] = 0
+		// 10-tick lookahead sum
+		sum10 := 0.0
+		lim10 := i + 10
+		if lim10 > nRet {
+			lim10 = nRet
 		}
-	}
+		for k := i; k < lim10; k++ {
+			sum10 += rets1[k]
+		}
+		rets10[i] = sum10
 
-	// Prefix Sums for Decay Horizons
-	if cap(*prefixBuf) < nRet+1 {
-		*prefixBuf = make([]float64, nRet+1)
+		// 100-tick lookahead sum
+		sum100 := 0.0
+		lim100 := i + 100
+		if lim100 > nRet {
+			lim100 = nRet
+		}
+		for k := i; k < lim100; k++ {
+			sum100 += rets1[k]
+		}
+		rets100[i] = sum100
 	}
-	prefix := (*prefixBuf)[:nRet+1]
-	prefix[0] = 0
-	for i := 0; i < nRet; i++ {
-		prefix[i+1] = prefix[i] + rets[i]
+	// -----------------------------------
+
+	if len(sb.Data) < numSignals {
+		sb.Data = make([][]float64, numSignals)
 	}
-
-	for hIdx, h := range DecayHorizons {
-		if h <= 0 || h > nRet {
-			decayBufs[hIdx] = decayBufs[hIdx][:0]
-			continue
-		}
-		length := n - h
-		if cap(decayBufs[hIdx]) < length {
-			decayBufs[hIdx] = make([]float64, length)
-		}
-		hr := decayBufs[hIdx][:length]
-		for i := 0; i < length; i++ {
-			hr[i] = prefix[i+h] - prefix[i]
-		}
-	}
-
-	// Latency Return Vectors
-	for lIdx, latMs := range LatencyHorizonsMs {
-		if latMs <= 0 {
-			latRetBufs[lIdx] = latRetBufs[lIdx][:0]
-			continue
-		}
-		if cap(latRetBufs[lIdx]) < nRet {
-			latRetBufs[lIdx] = make([]float64, nRet)
-		}
-		rLat := latRetBufs[lIdx][:nRet]
-
-		j := 0
-		for i := 0; i < nRet; i++ {
-			if j < i+1 {
-				j = i + 1
-			}
-			ti := times[i]
-			for j < n && times[j]-ti < latMs {
-				j++
-			}
-			if j >= n {
-				for k := i; k < nRet; k++ {
-					rLat[k] = 0
-				}
-				break
-			}
-			p0 := prices[i]
-			p1 := prices[j]
-			if p0 > 0 && p1 > 0 {
-				rLat[i] = math.Log(p1 / p0)
-			} else {
-				rLat[i] = 0
-			}
-		}
-	}
-
-	// Ensure Signal Buffers
 	for s := 0; s < numSignals; s++ {
 		if cap(sb.Data[s]) < n {
 			sb.Data[s] = make([]float64, n)
@@ -3085,17 +2735,20 @@ func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stri
 		sb.Data[s] = sb.Data[s][:n]
 	}
 
-	// Compute Primitive Signals
-	ComputeFeaturesAndSignals(cols, dists, sb.Data[:], fc, ws)
+	for _, g := range gens {
+		g.Reset()
+	}
+
+	for sIdx, gen := range gens {
+		out := sb.Data[sIdx]
+		gen.Update(mathCtx, out)
+	}
 
 	dayStats := make([]DailyStats, numSignals)
-
 	for sIdx := 0; sIdx < numSignals; sIdx++ {
 		sigs := sb.Data[sIdx][:nRet]
 
-		// --- ONLINE Z-SCORE NORMALIZATION ---
-		// Calculates Mean/StdDev for the day and normalizes the signal in-place.
-		// Also applies soft clamping to +/- 5 sigma to prevent PnL explosion.
+		// Z-Score Normalization
 		var sum, sumSq float64
 		for _, v := range sigs {
 			sum += v
@@ -3103,221 +2756,45 @@ func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stri
 		}
 		mean := sum / float64(len(sigs))
 		variance := (sumSq / float64(len(sigs))) - mean*mean
-
-		var stdInv float64
+		stdInv := 0.0
 		if variance > 1e-18 {
 			stdInv = 1.0 / math.Sqrt(variance)
 		}
-
 		for i := range sigs {
-			// Normalize
 			v := (sigs[i] - mean) * stdInv
-
-			// Soft Clamp (Tanh) to +/- 5 Sigma
-			// This prevents outliers from dominating the Pearson IC and PnL.
-			// 5.0 * Tanh(v / 5.0) approaches +/- 5 smoothly.
-			const limit = 5.0
-			if v > limit {
-				v = limit * math.Tanh(v/limit)
-			} else if v < -limit {
-				v = limit * math.Tanh(v/limit)
+			// Soft clamp +/- 5
+			if v > 5.0 {
+				v = 5.0 * math.Tanh(v/5.0)
+			} else if v < -5.0 {
+				v = 5.0 * math.Tanh(v/5.0)
 			}
 			sigs[i] = v
 		}
-		// ------------------------------------
 
-		dayStats[sIdx].Moments = CalcMomentsVectors(sigs, rets)
-		dayStats[sIdx].IC = calcIC(sigs, rets)
-
-		dayStats[sIdx].BucketResults = ComputeQuantilesStrided(sigs, rets, numBuckets, stride, ws)
-
-		dayStats[sIdx].DecayICs = make([]float64, len(DecayHorizons))
-		for hIdx, hr := range decayBufs {
-			if len(hr) == 0 {
-				dayStats[sIdx].DecayICs[hIdx] = math.NaN()
-				continue
-			}
-			length := len(hr)
-			if length > len(sigs) {
-				length = len(sigs)
-			}
-			dayStats[sIdx].DecayICs[hIdx] = calcIC(sigs[:length], hr[:length])
-		}
-
-		dayStats[sIdx].LatencyICs = make([]float64, len(LatencyHorizonsMs))
-		for lIdx, rLat := range latRetBufs {
-			if len(rLat) == 0 {
-				dayStats[sIdx].LatencyICs[lIdx] = math.NaN()
-				continue
-			}
-			length := len(rLat)
-			if length > len(sigs) {
-				length = len(sigs)
-			}
-			dayStats[sIdx].LatencyICs[lIdx] = calcIC(sigs[:length], rLat[:length])
-		}
-
-		var ddState DrawdownState
-		var fm FeeMoments
-		updatePnLPath(sigs, rets, &ddState, &fm)
-
-		dayStats[sIdx].NetPL_Total = ddState.CumNet
-		dayStats[sIdx].NetPL_Max = ddState.MaxNet
-		dayStats[sIdx].NetPL_Min = ddState.MinNet
-		dayStats[sIdx].MaxDD_Intra = ddState.MaxDDNet
-		dayStats[sIdx].GrossDD_Max = ddState.MaxDDGross
-		dayStats[sIdx].NetPnLMoments = fm
+		dayStats[sIdx].Moments = CalcMomentsVectors(sigs, rets1, rets10, rets100)
+		dayStats[sIdx].BucketResults = ComputeQuantilesStrided(sigs, rets1, numBuckets, stride, ws)
 	}
 
-	return &TaskResult{
-		DayIndex: taskIdx,
-		Stats:    dayStats,
-	}
+	return &TaskResult{DayIndex: taskIdx, Stats: dayStats}
 }
 
-func calcIC(sigs, rets []float64) float64 {
-	n := len(sigs)
-	if n == 0 || len(rets) != n {
-		return math.NaN()
-	}
-	var sumS, sumR, sumSS, sumRR, sumSR float64
-	for i := 0; i < n; i++ {
-		s, r := sigs[i], rets[i]
-		sumS += s
-		sumR += r
-		sumSS += s * s
-		sumRR += r * r
-		sumSR += s * r
-	}
-	N := float64(n)
-	num := N*sumSR - sumS*sumR
-	denX := N*sumSS - sumS*sumS
-	denY := N*sumRR - sumR*sumR
-	if denX <= 0 || denY <= 0 {
-		return math.NaN()
-	}
-	return num / math.Sqrt(denX*denY)
-}
-
-func printWinners(all []SignalSummary) {
+func printPhysicsWinners(all []SignalSummary) {
 	if len(all) == 0 {
-		fmt.Println("\n[winners] No summaries.")
 		return
 	}
-	sort.Slice(all, func(i, j int) bool { return all[i].NetSharpe > all[j].NetSharpe })
-	fmt.Println("\n=== GLOBAL TOP STRATEGIES (by NetSharpe) ===")
-	for i := 0; i < len(all) && i < 5; i++ {
+	// Sort by Short-Term Prediction (IC_1)
+	sort.Slice(all, func(i, j int) bool { return math.Abs(all[i].IC_1) > math.Abs(all[j].IC_1) })
+
+	fmt.Println("\n=== TOP SIGNALS BY PREDICTIVE POWER (IC_1) ===")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "RANK\tSYMBOL\tSIGNAL\tIC(1)\tIC(100)\tAUTO\tFLIP%")
+	fmt.Fprintln(w, "----\t------\t------\t-----\t-------\t----\t-----")
+	for i := 0; i < len(all) && i < 10; i++ {
 		s := all[i]
-		fmt.Printf("  #%d  %-8s | %-12s | NetSharpe=%.3f | MaxDD=%.4f\n",
-			i+1, s.Symbol, s.SignalName, s.NetSharpe, s.MaxDDNet)
+		fmt.Fprintf(w, "#%d\t%s\t%s\t%.4f\t%.4f\t%.3f\t%.1f%%\n",
+			i+1, s.Symbol, shortName(s.SignalName), s.IC_1, s.IC_100, s.AutoCorr, s.FlipRate*100)
 	}
-}
-
-func printMetricsReport(name string, f *os.File, ms MetricStats, bucketAggs []BucketAgg, decayHorizons []int, decayICs [][]float64, latencyHorizonsMs []int64, latencyICs [][]float64, bucketMono float64, extras PnLExtras) {
-	writeMetricsLog(f, fmt.Sprintf("\n[metrics] Aggregated signal/return statistics for %s:\n", name))
-	writeMetricsLog(f, fmt.Sprintf("  Count             : %d\n", ms.Count))
-	writeMetricsLog(f, fmt.Sprintf("  IC (Pearson)      : %.4f\n", ms.ICPearson))
-	writeMetricsLog(f, fmt.Sprintf("  IC t-stat         : %.2f\n", ms.IC_TStat))
-	writeMetricsLog(f, fmt.Sprintf("  Sharpe (PnL)      : %.3f\n", ms.Sharpe))
-	writeMetricsLog(f, fmt.Sprintf("  Hit Rate          : %.3f\n", ms.HitRate))
-	writeMetricsLog(f, fmt.Sprintf("  Breakeven Bps     : %.3f\n", ms.BreakevenBps))
-	writeMetricsLog(f, fmt.Sprintf("  AutoCorr(sig)     : %.3f\n", ms.AutoCorr))
-	writeMetricsLog(f, fmt.Sprintf("  AutoCorr(|s|)     : %.3f\n", ms.AutoCorrAbs))
-	writeMetricsLog(f, fmt.Sprintf("  AvgSegLen         : %.3f\n", ms.AvgSegLen))
-	writeMetricsLog(f, fmt.Sprintf("  MaxSegLen         : %.0f\n", ms.MaxSegLen))
-	writeMetricsLog(f, fmt.Sprintf("  Monotonicity      : %.3f (Spearman over buckets)\n", bucketMono))
-	writeMetricsLog(f, "\n  Signal Distribution:\n")
-	writeMetricsLog(f, fmt.Sprintf("    mean(s) = %.6f, std(s) = %.6f\n", ms.MeanSig, ms.StdSig))
-	writeMetricsLog(f, "\n  Return Distribution:\n")
-	writeMetricsLog(f, fmt.Sprintf("    mean(r) = %.8f, std(r) = %.8f\n", ms.MeanRet, ms.StdRet))
-	writeMetricsLog(f, "\n  PnL Distribution (s * r):\n")
-	writeMetricsLog(f, fmt.Sprintf("    mean(pnl) = %.8f, std(pnl) = %.8f, Sharpe_gross = %.3f\n", ms.MeanPnL, ms.StdPnL, ms.Sharpe))
-	writeMetricsLog(f, "\n  Net PnL (with taker fees):\n")
-	writeMetricsLog(f, fmt.Sprintf("    Fee(bps)        = %.3f\n", FeeBps))
-	writeMetricsLog(f, fmt.Sprintf("    mean(pnl_net) = %.8f, std(pnl_net) = %.8f, Sharpe_net = %.3f\n", extras.NetMean, extras.NetStd, extras.NetSharpe))
-	writeMetricsLog(f, fmt.Sprintf("    MaxDD(gross)  = %.8f, MaxDD(net)   = %.8f\n", extras.MaxDDGross, extras.MaxDDNet))
-	writeMetricsLog(f, "\n[buckets] Signal quantiles vs average return (bps):\n")
-	writeMetricsLog(f, "  Bucket |       AvgSig      |  AvgRet(bps) |    Count\n")
-	writeMetricsLog(f, "  -------+-----------+--------------+--------\n")
-	for i, agg := range bucketAggs {
-		br := agg.Finalize(i + 1)
-		writeMetricsLog(f, fmt.Sprintf("  %6d | %9.6f | %12.3f | %7d\n", br.ID, br.AvgSig, br.AvgRetBps, br.Count))
-	}
-	if len(decayHorizons) > 0 && len(decayICs) == len(decayHorizons) {
-		writeMetricsLog(f, "\n  Multi-horizon IC (tick-based; mean, t-stat):\n")
-		for i, h := range decayHorizons {
-			mean, t := summarizeICs(decayICs[i])
-			writeMetricsLog(f, fmt.Sprintf("    h=%d ticks: IC=%.4f, t=%.2f (n=%d)\n", h, mean, t, len(decayICs[i])))
-		}
-	}
-	if len(latencyHorizonsMs) > 0 && len(latencyICs) == len(latencyHorizonsMs) {
-		writeMetricsLog(f, "\n  Latency IC (time-based; mean, t-stat):\n")
-		for i, lat := range latencyHorizonsMs {
-			mean, t := summarizeICs(latencyICs[i])
-			writeMetricsLog(f, fmt.Sprintf("    L=%dms:   IC=%.4f, t=%.2f (n=%d)\n", lat, mean, t, len(latencyICs[i])))
-		}
-	}
-	writeMetricsLog(f, "\n")
-}
-
-func printFeatureCorrMatrix(f *os.File, corr [][]float64) {
-	if len(corr) == 0 {
-		writeMetricsLog(f, "\n[feat] Feature correlation matrix: insufficient data.\n")
-		return
-	}
-	writeMetricsLog(f, "\n[feat] Feature cross-correlation matrix (Pearson):\n\n")
-	writeMetricsLog(f, fmt.Sprintf("%-12s", ""))
-	for j := 0; j < len(FeatureNames); j++ {
-		writeMetricsLog(f, fmt.Sprintf(" %10.10s", FeatureNames[j]))
-	}
-	writeMetricsLog(f, "\n")
-	for i := 0; i < len(FeatureNames); i++ {
-		writeMetricsLog(f, fmt.Sprintf("%-12.12s", FeatureNames[i]))
-		if i >= len(corr) || corr[i] == nil {
-			writeMetricsLog(f, "\n")
-			continue
-		}
-		row := corr[i]
-		for j := 0; j < len(FeatureNames); j++ {
-			val := math.NaN()
-			if j < len(row) {
-				val = row[j]
-			}
-			if math.IsNaN(val) {
-				writeMetricsLog(f, fmt.Sprintf(" %10s", "NaN"))
-			} else {
-				writeMetricsLog(f, fmt.Sprintf(" %10.3f", val))
-			}
-		}
-		writeMetricsLog(f, "\n")
-	}
-}
-
-func printMathReport(f *os.File, dists []MathDist) {
-	writeMetricsLog(f, "\n[math] Feature distributions:\n\n")
-	writeMetricsLog(f, "   Feature        |        Min       |        Max       |        Mean      |       StdDev     |  Outlier%\n")
-	writeMetricsLog(f, "  ---------------+---------------+---------------+---------------+------------------+-----------\n")
-
-	for i, d := range dists {
-		name := "Unknown"
-		if i < len(FeatureNames) {
-			name = FeatureNames[i]
-		}
-		if d.Count == 0 {
-			writeMetricsLog(f, fmt.Sprintf("  %-14s | %13s | %13s | %13s | %13s | %8s\n", name, "-", "-", "-", "-", "-"))
-			continue
-		}
-		mean := d.Sum / d.Count
-		variance := (d.SumSq / d.Count) - mean*mean
-		std := 0.0
-		if variance > 0 {
-			std = math.Sqrt(variance)
-		}
-		outlierPct := (float64(d.Outliers) / d.Count) * 100.0
-		writeMetricsLog(f, fmt.Sprintf("  %-14s | %13.4f | %13.4f | %13.4f | %13.4f | %8.2f%%\n",
-			name, d.Min, d.Max, mean, std, outlierPct))
-	}
-	writeMetricsLog(f, "\n")
+	w.Flush()
 }
 ```
 

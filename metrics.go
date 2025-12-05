@@ -5,398 +5,218 @@ import (
 	"slices"
 )
 
-const (
-	// Realistic Taker Fee: 2.5 basis points (0.025%)
-	// This makes PnL calculations meaningful.
-	FeeBps = 2.5
-)
-
+// MetricStats focuses on Signal Physics and Information Content.
 type MetricStats struct {
-	Count        int
-	ICPearson    float64
-	IC_TStat     float64
-	Sharpe       float64
-	HitRate      float64
-	BreakevenBps float64
-	AutoCorr     float64
-	AutoCorrAbs  float64
-	AvgSegLen    float64
-	MaxSegLen    float64
+	Count int
 
-	MeanSig float64
-	StdSig  float64
-	MeanRet float64
-	StdRet  float64
-	MeanPnL float64
-	StdPnL  float64
+	// 1. Predictive Power (Information Coefficient)
+	IC_NextTick float64 // Correlation with next 1 tick return (Microstructure)
+	IC_10Tick   float64 // Correlation with next 10 ticks (Short Trend)
+	IC_100Tick  float64 // Correlation with next 100 ticks (Alpha)
+
+	// 2. Signal Dynamics (Behavior)
+	Autocorrelation float64 // Lag-1 AutoCorr: >0.9=Stable, <0.0=MeanReverting
+	FlipRate        float64 // % of updates where sign changes (Jitter)
+	ActivityRate    float64 // % of time signal is non-zero (Sparsity)
+
+	// 3. Information Quality
+	SignalNoiseRatio float64 // Mean / StdDev (Consistency of bias)
+	OutlierRate      float64 // % of values > 3 sigma
+
+	// 4. Lead/Lag Structure
+	Monotonicity float64 // Rank correlation of Signal vs Return Buckets
 }
 
 type Moments struct {
-	Count          float64
-	SumSig         float64
-	SumRet         float64
-	SumProd        float64
-	SumSqSig       float64
-	SumSqRet       float64
-	SumPnL         float64
-	SumSqPnL       float64
-	Hits           float64
-	ValidHits      float64
-	SumAbsDeltaSig float64
-	SumProdLag     float64
-	SumAbsSig      float64
-	SumAbsProdLag  float64
-	SegCount       float64
-	SegLenTotal    float64
-	SegLenMax      float64
+	Count float64
+
+	// Sums for Correlation (Signal side)
+	SumSig   float64
+	SumSqSig float64
+
+	// Returns at different horizons
+	SumRet1   float64
+	SumSqRet1 float64
+	SumProd1  float64 // Sig * Ret1
+
+	SumRet10   float64
+	SumSqRet10 float64
+	SumProd10  float64 // Sig * Ret10
+
+	SumRet100   float64
+	SumSqRet100 float64
+	SumProd100  float64 // Sig * Ret100
+
+	// Stability Moments
+	SumProdLag1 float64 // Sig[t] * Sig[t-1] (Autocorr)
+	Flips       float64 // Count of sign changes
+	NonZero     float64 // Count of non-zero signals
+	Outliers    float64 // Count of extreme values
 }
 
 func (m *Moments) Add(m2 Moments) {
 	m.Count += m2.Count
 	m.SumSig += m2.SumSig
-	m.SumRet += m2.SumRet
-	m.SumProd += m2.SumProd
 	m.SumSqSig += m2.SumSqSig
-	m.SumSqRet += m2.SumSqRet
-	m.SumPnL += m2.SumPnL
-	m.SumSqPnL += m2.SumSqPnL
-	m.Hits += m2.Hits
-	m.ValidHits += m2.ValidHits
-	m.SumAbsDeltaSig += m2.SumAbsDeltaSig
-	m.SumProdLag += m2.SumProdLag
-	m.SumAbsSig += m2.SumAbsSig
-	m.SumAbsProdLag += m2.SumAbsProdLag
-	m.SegCount += m2.SegCount
-	m.SegLenTotal += m2.SegLenTotal
-	if m2.SegLenMax > m.SegLenMax {
-		m.SegLenMax = m2.SegLenMax
-	}
+
+	m.SumRet1 += m2.SumRet1
+	m.SumSqRet1 += m2.SumSqRet1
+	m.SumProd1 += m2.SumProd1
+
+	m.SumRet10 += m2.SumRet10
+	m.SumSqRet10 += m2.SumSqRet10
+	m.SumProd10 += m2.SumProd10
+
+	m.SumRet100 += m2.SumRet100
+	m.SumSqRet100 += m2.SumSqRet100
+	m.SumProd100 += m2.SumProd100
+
+	m.SumProdLag1 += m2.SumProdLag1
+	m.Flips += m2.Flips
+	m.NonZero += m2.NonZero
+	m.Outliers += m2.Outliers
 }
 
-type DrawdownState struct {
-	CumGross   float64
-	PeakGross  float64
-	MaxDDGross float64
-
-	CumNet   float64
-	PeakNet  float64
-	MaxDDNet float64
-
-	MinNet float64
-	MaxNet float64
-}
-
-type FeeMoments struct {
-	Count    float64
-	SumNet   float64
-	SumSqNet float64
-}
-
-func (fm *FeeMoments) Add(m2 FeeMoments) {
-	fm.Count += m2.Count
-	fm.SumNet += m2.SumNet
-	fm.SumSqNet += m2.SumSqNet
-}
-
-type PnLExtras struct {
-	NetMean    float64
-	NetStd     float64
-	NetSharpe  float64
-	MaxDDGross float64
-	MaxDDNet   float64
-}
-
-func updatePnLPath(sigs, rets []float64, state *DrawdownState, fm *FeeMoments) {
-	n := len(sigs)
-	if n == 0 || len(rets) < n {
-		return
-	}
-
-	prevPos := 0.0
-	// Fee is per unit of turnover.
-	// FeeBps = 2.5 -> 0.00025.
-	// If signal is Z-Score, it's roughly "units of risk".
-	// We assume 1 unit of signal = 1 unit of notional for fee calculation.
-	feePerUnit := FeeBps / 10000.0
-
-	_ = sigs[n-1]
-	_ = rets[n-1]
-
-	firstNet := true
-
-	for i := 0; i < n; i++ {
-		pos := sigs[i]
-		r := rets[i]
-
-		// Gross PnL
-		gross := pos * r
-		state.CumGross += gross
-		if state.CumGross > state.PeakGross {
-			state.PeakGross = state.CumGross
-		}
-		dd := state.PeakGross - state.CumGross
-		if dd > state.MaxDDGross {
-			state.MaxDDGross = dd
-		}
-
-		// Fee on position change
-		dPos := pos - prevPos
-		if dPos < 0 {
-			dPos = -dPos
-		}
-		fee := feePerUnit * dPos
-
-		net := gross - fee
-		state.CumNet += net
-		if state.CumNet > state.PeakNet {
-			state.PeakNet = state.CumNet
-		}
-		ddNet := state.PeakNet - state.CumNet
-		if ddNet > state.MaxDDNet {
-			state.MaxDDNet = ddNet
-		}
-
-		if firstNet {
-			state.MinNet = state.CumNet
-			state.MaxNet = state.CumNet
-			firstNet = false
-		} else {
-			if state.CumNet < state.MinNet {
-				state.MinNet = state.CumNet
-			}
-			if state.CumNet > state.MaxNet {
-				state.MaxNet = state.CumNet
-			}
-		}
-
-		fm.Count++
-		fm.SumNet += net
-		fm.SumSqNet += net * net
-
-		prevPos = pos
-	}
-}
-
-func CalcMomentsVectors(sigs, rets []float64) Moments {
+// CalcMomentsVectors computes physics stats in a single pass.
+func CalcMomentsVectors(sigs, rets1, rets10, rets100 []float64) Moments {
 	var m Moments
 	n := len(sigs)
-	if n == 0 || len(rets) < n {
+	if n == 0 {
 		return m
 	}
 
-	var sumSig, sumRet, sumProd, sumSqSig, sumSqRet, sumPnL, sumSqPnL, sumAbsSig float64
-
-	_ = rets[n-1]
-	_ = sigs[n-1]
-
-	for i := 0; i < n; i++ {
-		s := sigs[i]
-		r := rets[i]
-
-		sumSig += s
-		sumRet += r
-		sumProd += s * r
-		sumSqSig += s * s
-		sumSqRet += r * r
-
-		pnl := s * r
-		sumPnL += pnl
-		sumSqPnL += pnl * pnl
-
-		absS := s
-		if absS < 0 {
-			absS = -absS
-		}
-		sumAbsSig += absS
-	}
-
-	m.Count = float64(n)
-	m.SumSig = sumSig
-	m.SumRet = sumRet
-	m.SumProd = sumProd
-	m.SumSqSig = sumSqSig
-	m.SumSqRet = sumSqRet
-	m.SumPnL = sumPnL
-	m.SumSqPnL = sumSqPnL
-	m.SumAbsSig = sumAbsSig
+	// BCE Hint
+	_ = rets1[n-1]
 
 	var prevSig float64
-	var prevSign float64
-	var curSegLen float64
-
-	var hits, validHits, sumAbsDelta, sumProdLag, sumAbsProdLag float64
-	var segCount, segLenTotal, segLenMax float64
 
 	for i := 0; i < n; i++ {
 		s := sigs[i]
-		r := rets[i]
 
-		if s != 0 && r != 0 {
-			validHits++
-			if (s > 0 && r > 0) || (s < 0 && r < 0) {
-				hits++
-			}
+		m.SumSig += s
+		m.SumSqSig += s * s
+
+		if s != 0 {
+			m.NonZero++
+		}
+		if math.Abs(s) > 3.0 {
+			m.Outliers++
 		}
 
+		// 1-Tick IC
+		r1 := rets1[i]
+		m.SumRet1 += r1
+		m.SumSqRet1 += r1 * r1
+		m.SumProd1 += s * r1
+
+		// 10-Tick IC
+		if i < len(rets10) {
+			r10 := rets10[i]
+			m.SumRet10 += r10
+			m.SumSqRet10 += r10 * r10
+			m.SumProd10 += s * r10
+		}
+
+		// 100-Tick IC
+		if i < len(rets100) {
+			r100 := rets100[i]
+			m.SumRet100 += r100
+			m.SumSqRet100 += r100 * r100
+			m.SumProd100 += s * r100
+		}
+
+		// Dynamics
 		if i > 0 {
-			d := s - prevSig
-			if d < 0 {
-				d = -d
-			}
-			sumAbsDelta += d
-			sumProdLag += s * prevSig
-
-			absPrev := prevSig
-			if absPrev < 0 {
-				absPrev = -absPrev
-			}
-			absS := s
-			if absS < 0 {
-				absS = -absS
-			}
-			sumAbsProdLag += absS * absPrev
-		}
-
-		sign := 0.0
-		if s > 0 {
-			sign = 1.0
-		} else if s < 0 {
-			sign = -1.0
-		}
-
-		if sign != 0 {
-			if prevSign == sign {
-				curSegLen++
-			} else {
-				if curSegLen > 0 {
-					segCount++
-					segLenTotal += curSegLen
-					if curSegLen > segLenMax {
-						segLenMax = curSegLen
-					}
-				}
-				curSegLen = 1
-			}
-		} else {
-			if curSegLen > 0 {
-				segCount++
-				segLenTotal += curSegLen
-				if curSegLen > segLenMax {
-					segLenMax = curSegLen
-				}
-				curSegLen = 0
+			m.SumProdLag1 += s * prevSig
+			// Flip detection: Crossing zero
+			if (s > 0 && prevSig < 0) || (s < 0 && prevSig > 0) {
+				m.Flips++
 			}
 		}
 		prevSig = s
-		prevSign = sign
 	}
-
-	if curSegLen > 0 {
-		segCount++
-		segLenTotal += curSegLen
-		if curSegLen > segLenMax {
-			segLenMax = curSegLen
-		}
-	}
-
-	m.Hits = hits
-	m.ValidHits = validHits
-	m.SumAbsDeltaSig = sumAbsDelta
-	m.SumProdLag = sumProdLag
-	m.SumAbsProdLag = sumAbsProdLag
-	m.SegCount = segCount
-	m.SegLenTotal = segLenTotal
-	m.SegLenMax = segLenMax
-
+	m.Count = float64(n)
 	return m
 }
 
-func FinalizeMetrics(m Moments, dailyICs []float64) MetricStats {
+func FinalizeMetrics(m Moments) MetricStats {
 	if m.Count <= 1 {
-		return MetricStats{Count: int(m.Count)}
-	}
-	ms := MetricStats{Count: int(m.Count)}
-
-	num := m.Count*m.SumProd - m.SumSig*m.SumRet
-	denX := m.Count*m.SumSqSig - m.SumSig*m.SumSig
-	denY := m.Count*m.SumSqRet - m.SumRet*m.SumRet
-	if denX > 0 && denY > 0 {
-		ms.ICPearson = num / math.Sqrt(denX*denY)
+		return MetricStats{}
 	}
 
-	ms.MeanSig = m.SumSig / m.Count
-	varSig := (m.SumSqSig / m.Count) - ms.MeanSig*ms.MeanSig
-	if varSig < 0 {
-		varSig = 0
-	}
-	ms.StdSig = math.Sqrt(varSig)
+	stats := MetricStats{Count: int(m.Count)}
+	N := m.Count
 
-	ms.MeanRet = m.SumRet / m.Count
-	varRet := (m.SumSqRet / m.Count) - ms.MeanRet*ms.MeanRet
-	if varRet < 0 {
-		varRet = 0
-	}
-	ms.StdRet = math.Sqrt(varRet)
-
-	ms.MeanPnL = m.SumPnL / m.Count
-	varPnL := (m.SumSqPnL / m.Count) - ms.MeanPnL*ms.MeanPnL
-	if varPnL < 0 {
-		varPnL = 0
-	}
-	ms.StdPnL = math.Sqrt(varPnL)
-	if varPnL > 1e-18 {
-		ms.Sharpe = ms.MeanPnL / ms.StdPnL
-	}
-
-	if m.ValidHits > 0 {
-		ms.HitRate = m.Hits / m.ValidHits
-	}
-	if m.SumAbsDeltaSig > 1e-18 {
-		ms.BreakevenBps = (m.SumPnL / m.SumAbsDeltaSig) * 10000.0
-	}
-
-	if varSig > 1e-18 {
-		covLag := (m.SumProdLag / m.Count) - ms.MeanSig*ms.MeanSig
-		ms.AutoCorr = covLag / varSig
-	}
-
-	if m.Count > 0 {
-		meanAbs := m.SumAbsSig / m.Count
-		covAbs := (m.SumAbsProdLag / m.Count) - meanAbs*meanAbs
-		varAbs := (m.SumSqSig / m.Count) - meanAbs*meanAbs
-		if varAbs > 1e-18 {
-			ms.AutoCorrAbs = covAbs / varAbs
+	// Helper for Pearson Correlation
+	corr := func(sumX, sumSqX, sumY, sumSqY, sumXY float64) float64 {
+		num := N*sumXY - sumX*sumY
+		denX := N*sumSqX - sumX*sumX
+		denY := N*sumSqY - sumY*sumY
+		if denX <= 1e-18 || denY <= 1e-18 {
+			return 0
 		}
+		return num / math.Sqrt(denX*denY)
 	}
 
-	if m.SegCount > 0 {
-		ms.AvgSegLen = m.SegLenTotal / m.SegCount
-	}
-	ms.MaxSegLen = m.SegLenMax
+	// 1. Prediction (IC)
+	stats.IC_NextTick = corr(m.SumSig, m.SumSqSig, m.SumRet1, m.SumSqRet1, m.SumProd1)
+	stats.IC_10Tick = corr(m.SumSig, m.SumSqSig, m.SumRet10, m.SumSqRet10, m.SumProd10)
+	stats.IC_100Tick = corr(m.SumSig, m.SumSqSig, m.SumRet100, m.SumSqRet100, m.SumProd100)
 
-	if len(dailyICs) > 1 {
-		var sum, sumSq float64
-		n := float64(len(dailyICs))
-		for _, v := range dailyICs {
-			sum += v
-			sumSq += v * v
-		}
-		mean := sum / n
-		variance := (sumSq / n) - mean*mean
-		if variance > 1e-18 {
-			stdDev := math.Sqrt(variance)
-			ms.IC_TStat = mean / (stdDev / math.Sqrt(n))
-		}
-	}
+	// 2. Dynamics
+	// Autocorrelation (Lag-1)
+	// We approximate using SumSig/SumSqSig for Y as well, as Lag-1 shift is negligible for large N
+	stats.Autocorrelation = corr(m.SumSig, m.SumSqSig, m.SumSig, m.SumSqSig, m.SumProdLag1)
 
-	return ms
+	stats.FlipRate = m.Flips / N
+	stats.ActivityRate = m.NonZero / N
+
+	// 3. Quality
+	mean := m.SumSig / N
+	variance := (m.SumSqSig / N) - mean*mean
+	if variance > 0 {
+		stats.SignalNoiseRatio = math.Abs(mean) / math.Sqrt(variance)
+	}
+	stats.OutlierRate = m.Outliers / N
+
+	return stats
 }
+
+// --- Bucket Logic (Monotonicity) ---
 
 type BucketResult struct {
 	ID        int
 	AvgSig    float64
 	AvgRetBps float64
 	Count     int
+}
+
+type BucketAgg struct {
+	Count     int
+	SumSig    float64
+	SumRetBps float64
+}
+
+func (ba *BucketAgg) Add(br BucketResult) {
+	if br.Count <= 0 {
+		return
+	}
+	ba.Count += br.Count
+	ba.SumSig += br.AvgSig * float64(br.Count)
+	ba.SumRetBps += br.AvgRetBps * float64(br.Count)
+}
+
+func (ba BucketAgg) Finalize(id int) BucketResult {
+	if ba.Count == 0 {
+		return BucketResult{ID: id}
+	}
+	den := float64(ba.Count)
+	return BucketResult{
+		ID:        id,
+		AvgSig:    ba.SumSig / den,
+		AvgRetBps: ba.SumRetBps / den,
+		Count:     ba.Count,
+	}
 }
 
 func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scratch *MathWorkspace) []BucketResult {
@@ -412,7 +232,6 @@ func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scrat
 	}
 
 	estSize := n / stride
-
 	if cap(scratch.SortBuf) < estSize {
 		scratch.SortBuf = make([]SortPair, estSize)
 	}
@@ -468,34 +287,6 @@ func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scrat
 	return results
 }
 
-type BucketAgg struct {
-	Count     int
-	SumSig    float64
-	SumRetBps float64
-}
-
-func (ba *BucketAgg) Add(br BucketResult) {
-	if br.Count <= 0 {
-		return
-	}
-	ba.Count += br.Count
-	ba.SumSig += br.AvgSig * float64(br.Count)
-	ba.SumRetBps += br.AvgRetBps * float64(br.Count)
-}
-
-func (ba BucketAgg) Finalize(id int) BucketResult {
-	if ba.Count == 0 {
-		return BucketResult{ID: id}
-	}
-	den := float64(ba.Count)
-	return BucketResult{
-		ID:        id,
-		AvgSig:    ba.SumSig / den,
-		AvgRetBps: ba.SumRetBps / den,
-		Count:     ba.Count,
-	}
-}
-
 func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	var brs []BucketResult
 	for i, agg := range bucketAggs {
@@ -519,14 +310,13 @@ func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	}
 
 	slices.SortFunc(ranks, func(a, b kv) int {
-		switch {
-		case a.val < b.val:
+		if a.val < b.val {
 			return -1
-		case a.val > b.val:
-			return 1
-		default:
-			return 0
 		}
+		if a.val > b.val {
+			return 1
+		}
+		return 0
 	})
 
 	yRank := make([]float64, n)
@@ -542,25 +332,4 @@ func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
 	}
 	nf := float64(n)
 	return 1.0 - (6.0*sumD2)/(nf*(nf*nf-1.0))
-}
-
-func summarizeICs(ics []float64) (mean, tstat float64) {
-	n := len(ics)
-	if n == 0 {
-		return 0, 0
-	}
-	var sum, sumSq float64
-	for _, v := range ics {
-		sum += v
-		sumSq += v * v
-	}
-	nf := float64(n)
-	mean = sum / nf
-	variance := (sumSq / nf) - mean*mean
-	if variance <= 1e-18 {
-		return mean, 0
-	}
-	std := math.Sqrt(variance)
-	tstat = mean / (std / math.Sqrt(nf))
-	return
 }

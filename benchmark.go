@@ -16,10 +16,14 @@ import (
 )
 
 type threadContext struct {
-	d  []MathDist
-	fc FeatureCorr
-	s  [][]float64
-	ws *MathWorkspace
+	// Infrastructure
+	ws   *MathWorkspace
+	cols *DayColumns
+
+	// Math Engine
+	gens []Generator
+	sigs [][]float64 // Output buffer: [FeatureIdx][Row]
+
 	// Explicit padding to reduce False Sharing between hot per-thread states.
 	// Sized so that each context occupies at least ~128 bytes on 64-bit targets.
 	_ [120]byte
@@ -28,9 +32,18 @@ type threadContext struct {
 func runBenchmark() {
 	cores := runtime.GOMAXPROCS(0)
 
-	fmt.Println("\n>>> QUANT-GRADE STRESS TEST (SUSTAINED LOAD) <<<")
+	// 1. Setup Dynamic Math Engine
+	coreGens := GetCorePrimitives()
+	featureCount := len(coreGens)
+	featureNames := make([]string, featureCount)
+	for i, g := range coreGens {
+		featureNames[i] = g.Name()
+	}
+
+	fmt.Println("\n>>> QUANT-GRADE STRESS TEST (MODULAR ENGINE) <<<")
 	fmt.Printf("    Hardware: %d Threads | %s / %s | Zen 4 Optimization: ACTIVE\n", cores, runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("    Target  : Zero-Alloc Math Engine + Green Tea GC + AVX-512 Unrolling\n\n")
+	fmt.Printf("    Target  : 7 Core Primitives (Stateful) + Zero-Alloc Context Bridge\n")
+	fmt.Printf("    Signals : %v\n\n", featureNames)
 
 	f, err := os.Create("Benchmark_Elite_Report.txt")
 	if err != nil {
@@ -39,25 +52,32 @@ func runBenchmark() {
 	}
 	defer f.Close()
 
-	// 1. DATA GENERATION
+	// 2. DATA GENERATION
 	rows := 1_000_000
 	fmt.Printf(" [1/5] Generating Synthetic Data (%d rows)... ", rows)
-	cols := generateSyntheticColumns(rows)
-	dists := InitMathDists()
-	fc := InitFeatureCorr()
-	signals := make([][]float64, FeatureCount)
-	for i := range signals {
-		signals[i] = make([]float64, rows)
-	}
 
-	ws := &MathWorkspace{}
+	// We use the Pool to get a clean structure, then populate it
+	benchCols := DayColumnPool.Get().(*DayColumns)
+	generateSyntheticColumns(benchCols, rows)
+
 	fmt.Println("Done.")
 
-	// 2. LATENCY DISTRIBUTION
+	// 3. LATENCY DISTRIBUTION (Jitter Test)
 	fmt.Println(" [2/5] Measuring Tail Latency (Jitter)...")
 	warmup := 5
 	samples := 50
 	latencies := make([]time.Duration, samples)
+
+	// Pre-allocate single thread context for latency test
+	latencyCtx := &threadContext{
+		ws:   &MathWorkspace{},
+		cols: benchCols, // Share the read-only data
+		gens: GetCorePrimitives(),
+		sigs: make([][]float64, featureCount),
+	}
+	for i := range latencyCtx.sigs {
+		latencyCtx.sigs[i] = make([]float64, rows)
+	}
 
 	debug.SetGCPercent(-1)
 	runtime.GC()
@@ -65,12 +85,28 @@ func runBenchmark() {
 
 	for i := 0; i < warmup+samples; i++ {
 		start := time.Now()
-		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+
+		// --- HOT PATH BEGIN ---
+		// 1. The Bridge (Raw -> Fluid)
+		mathCtx := PrepareMathContext(latencyCtx.cols, latencyCtx.ws)
+
+		// 2. The Engine
+		for sIdx, gen := range latencyCtx.gens {
+			gen.Update(mathCtx, latencyCtx.sigs[sIdx])
+		}
+		// --- HOT PATH END ---
+
 		dur := time.Since(start)
 		if i >= warmup {
 			latencies[i-warmup] = dur
 		}
+
+		// Reset generators for next run to ensure identical compute load
+		for _, g := range latencyCtx.gens {
+			g.Reset()
+		}
 	}
+
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	p50 := latencies[samples/2]
 	p99Idx := int(math.Ceil(0.99*float64(samples))) - 1
@@ -79,10 +115,16 @@ func runBenchmark() {
 	}
 	p99 := latencies[p99Idx]
 
-	// 3. THROUGHPUT & BANDWIDTH
+	// 4. THROUGHPUT & BANDWIDTH
 	fmt.Println(" [3/5] Measuring Memory Bandwidth...")
+
+	// Input: Time(8)+Price(8)+Qty(8)+Side(1)+Match(2) = 27 bytes/row
+	// Context: DT(8)+DP(8)+LogRet(8)+RawTCI(8) = 32 bytes/row (Derived)
+	// Output: 7 signals * 8 bytes = 56 bytes/row
+	// Total RW traffic per pass approx: (27 reads) + (32 writes/reads) + (56 writes)
+	// Realistically, we measure "Effective" throughput based on input size.
 	inputBytes := uint64(rows * 27)
-	outputBytes := uint64(rows * FeatureCount * 8)
+	outputBytes := uint64(rows * featureCount * 8)
 	totalBytes := inputBytes + outputBytes
 
 	minDur := latencies[0]
@@ -91,11 +133,15 @@ func runBenchmark() {
 	}
 	gbPerSec := (float64(totalBytes) / minDur.Seconds()) / 1024 / 1024 / 1024
 
-	// 4. GC PAUSE ANALYSIS
+	// 5. GC PAUSE ANALYSIS
 	fmt.Println(" [4/5] Measuring Garbage Collector 'Stop-The-World' Pauses...")
 	var gcStats debug.GCStats
+	// Force some allocations to trigger GC if any exist (though we aim for zero)
 	for i := 0; i < 20; i++ {
-		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+		mathCtx := PrepareMathContext(latencyCtx.cols, latencyCtx.ws)
+		for sIdx, gen := range latencyCtx.gens {
+			gen.Update(mathCtx, latencyCtx.sigs[sIdx])
+		}
 	}
 	debug.ReadGCStats(&gcStats)
 	pauseTotal := gcStats.PauseTotal
@@ -107,22 +153,22 @@ func runBenchmark() {
 		}
 	}
 
-	// 5. SCALABILITY
+	// 6. SCALABILITY (Saturation)
 	fmt.Println(" [5/5] Torture Test: All Cores Saturation (5 Seconds)...")
-	fmt.Println("        (Padding enabled to prevent False Sharing)")
 
-	// OPTIMIZATION: Slice of pointers to ensure heap separation
+	// Prepare threaded contexts
 	contexts := make([]*threadContext, cores)
 	for i := 0; i < cores; i++ {
-		contexts[i] = &threadContext{
-			d:  InitMathDists(),
-			fc: InitFeatureCorr(),
-			s:  make([][]float64, FeatureCount),
-			ws: &MathWorkspace{},
+		ctx := &threadContext{
+			ws:   &MathWorkspace{},
+			cols: benchCols, // They all read the same input memory (good for cache test)
+			gens: GetCorePrimitives(),
+			sigs: make([][]float64, featureCount),
 		}
-		for k := range contexts[i].s {
-			contexts[i].s[k] = make([]float64, rows)
+		for k := range ctx.sigs {
+			ctx.sigs[k] = make([]float64, rows)
 		}
+		contexts[i] = ctx
 	}
 
 	var wg sync.WaitGroup
@@ -133,15 +179,29 @@ func runBenchmark() {
 
 	for i := 0; i < cores; i++ {
 		wg.Add(1)
-		ctx := contexts[i] // Pointer copy
+		ctx := contexts[i]
 		go func() {
 			defer wg.Done()
+			// Localize pointers to avoid pointer chasing in loop
+			myGens := ctx.gens
+			mySigs := ctx.sigs
+			myCols := ctx.cols
+			myWs := ctx.ws
+
 			for {
 				select {
 				case <-stopChan:
 					return
 				default:
-					ComputeFeaturesAndSignals(cols, ctx.d, ctx.s, &ctx.fc, ctx.ws)
+					// Benchmark the full pipeline
+					mathCtx := PrepareMathContext(myCols, myWs)
+					for sIdx, gen := range myGens {
+						gen.Update(mathCtx, mySigs[sIdx])
+					}
+
+					// We don't reset generators inside the hot loop to simulate "streaming"
+					// where state persists, effectively making the test strictly about compute/memory.
+
 					totalBatches.Add(1)
 				}
 			}
@@ -157,11 +217,17 @@ func runBenchmark() {
 	batchesDone := totalBatches.Load()
 	totalEvents := int64(rows) * batchesDone
 	throughputMulti := float64(totalEvents) / durMulti.Seconds()
-	flops := throughputMulti * 150.0 / 1_000_000_000.0
+
+	// Approx FLOPS estimation:
+	// Each row involves exp(), log(), divs, accumulation.
+	// ~50 FLOPs per primitive per row * 7 primitives = 350 FLOPS/row
+	flops := throughputMulti * 350.0 / 1_000_000_000.0
 
 	printEliteReport(os.Stdout, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
 	printEliteReport(f, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
-	DayColumnPool.Put(cols)
+
+	// Cleanup (optional since program ends)
+	DayColumnPool.Put(benchCols)
 }
 
 func printEliteReport(out *os.File, p50, p99 time.Duration, gbps, tput float64, cores, rows int, numGC int64, maxPause, totalPause time.Duration, flops float64) {
@@ -190,52 +256,58 @@ func printEliteReport(out *os.File, p50, p99 time.Duration, gbps, tput float64, 
 	w.Flush()
 }
 
-func generateSyntheticColumns(rows int) *DayColumns {
-	cols := DayColumnPool.Get().(*DayColumns)
+func generateSyntheticColumns(cols *DayColumns, rows int) {
 	cols.Reset()
 
-	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 999))
-
-	baseTime := int64(1704067200000)
-	basePrice := 50000.0
-
+	// Ensure capacity
 	if cap(cols.Times) < rows {
-		cols.Times = make([]int64, 0, rows)
-		cols.Prices = make([]float64, 0, rows)
-		cols.Qtys = make([]float64, 0, rows)
-		cols.Sides = make([]int8, 0, rows)
-		cols.Matches = make([]uint16, 0, rows)
+		cols.Times = make([]int64, rows)
+		cols.Prices = make([]float64, rows)
+		cols.Qtys = make([]float64, rows)
+		cols.Sides = make([]int8, rows)
+		cols.Matches = make([]uint16, rows)
 	}
-
 	cols.Times = cols.Times[:rows]
 	cols.Prices = cols.Prices[:rows]
 	cols.Qtys = cols.Qtys[:rows]
 	cols.Sides = cols.Sides[:rows]
 	cols.Matches = cols.Matches[:rows]
 
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 999))
+
+	baseTime := int64(1704067200000)
+	basePrice := 50000.0
+
+	// Unsafe Pointers for fast generation
 	pTimes := unsafe.SliceData(cols.Times)
 	pPrices := unsafe.SliceData(cols.Prices)
 	pQtys := unsafe.SliceData(cols.Qtys)
 	pSides := unsafe.SliceData(cols.Sides)
 	pMatches := unsafe.SliceData(cols.Matches)
 
-	// //go:nocheckptr
 	for i := 0; i < rows; i++ {
-		*(*int64)(unsafe.Pointer(uintptr(unsafe.Pointer(pTimes)) + uintptr(i)*8)) = baseTime + int64(i*10)
+		// Time increases by 0 to 20ms
+		baseTime += int64(rng.Uint64() % 20)
+		*(*int64)(unsafe.Pointer(uintptr(unsafe.Pointer(pTimes)) + uintptr(i)*8)) = baseTime
 
+		// Random walk price
 		if i > 0 {
 			basePrice += (rng.Float64() - 0.5) * 10.0
 		}
 		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pPrices)) + uintptr(i)*8)) = basePrice
+
+		// Random Qty
 		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pQtys)) + uintptr(i)*8)) = rng.Float64() * 2.0
 
+		// Random Side
 		s := int8(1)
 		if rng.Uint64()&1 == 0 {
 			s = -1
 		}
 		*(*int8)(unsafe.Pointer(uintptr(unsafe.Pointer(pSides)) + uintptr(i)*1)) = s
+
+		// Random matches
 		*(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(pMatches)) + uintptr(i)*2)) = 1
 	}
 	cols.Count = rows
-	return cols
 }

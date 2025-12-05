@@ -2,333 +2,330 @@ package main
 
 import (
 	"math"
+	"sync"
 )
 
-// --- Configuration & Globals ---
+// --- Constants & Hyperparameters ---
+const (
+	// Leaky Integrator Decay (Golden Ratio in seconds)
+	TauPressure  = 0.618
+	TauIntensity = 0.618
+	TauVol       = 1.000
 
-var FeatureNames = []string{
-	"TCI", "TCI_abs", "TCI_sign", "TCI_sq",
-	"OFI", "OFI_abs", "OFI_sign", "OFI_sq",
-	"NFI", "NFI_abs", "NFI_sign", "NFI_sq",
-	"Sweep", "Sweep_abs", "Sweep_sign", "Sweep_sq",
-	"SweepDensity", "SweepDensity_abs", "SweepDensity_sign", "SweepDensity_sq",
-	"Pressure", "Pressure_abs", "Pressure_sign", "Pressure_sq",
-	"Velocity", "Velocity_abs", "Velocity_sign", "Velocity_sq",
-	"Resistance", "Resistance_abs", "Resistance_sign", "Resistance_sq",
-	"LogQty", "LogQty_abs", "LogQty_sign", "LogQty_sq",
-}
+	// Kalman Filters
+	KalmanR       = 0.25 // Measurement noise
+	KalmanQStatic = 0.05 // Static process noise rate
+	KalmanQBase   = 0.01 // Adaptive base noise
+	KalmanAlpha   = 5.0  // Adaptive scaling factor for error^2
 
-var FeatureCount = len(FeatureNames)
+	// Regime Shift (CUSUM)
+	CusumDriftK = 0.1 // Drift tolerance
+	CusumResetH = 5.0 // Threshold to declare shift and reset
+)
 
-func MetricFeatureNames() []string { return FeatureNames }
+// --- 1. Math Workspace & Memory ---
 
-// --- Statistical Structures ---
-
-type MathDist struct {
-	Count    float64
-	Min      float64
-	Max      float64
-	Sum      float64
-	SumSq    float64
-	Last     float64
-	Outliers int64 // New: Track soft-clipped values
-}
-
-func InitMathDists() []MathDist {
-	d := make([]MathDist, FeatureCount)
-	for i := range d {
-		d[i].Min = math.MaxFloat64
-		d[i].Max = -math.MaxFloat64
-	}
-	return d
-}
-
-type FeatureCorr struct {
-	Count   float64
-	SumProd []float64
-	SumX    []float64
-	SumSqX  []float64
-}
-
-func InitFeatureCorr() FeatureCorr {
-	return FeatureCorr{
-		SumProd: make([]float64, FeatureCount*FeatureCount),
-		SumX:    make([]float64, FeatureCount),
-		SumSqX:  make([]float64, FeatureCount),
-	}
-}
-
-func BuildFeatureCorrMatrix(fc FeatureCorr) ([][]float64, error) {
-	n := FeatureCount
-	mat := make([][]float64, n)
-	for i := range mat {
-		mat[i] = make([]float64, n)
-	}
-	if fc.Count <= 1 {
-		return mat, nil
-	}
-	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
-			idx := i*n + j
-			meanX := fc.SumX[i] / fc.Count
-			meanY := fc.SumX[j] / fc.Count
-			varX := (fc.SumSqX[i] / fc.Count) - meanX*meanX
-			varY := (fc.SumSqX[j] / fc.Count) - meanY*meanY
-			cov := (fc.SumProd[idx] / fc.Count) - meanX*meanY
-
-			if varX > 1e-18 && varY > 1e-18 {
-				mat[i][j] = cov / (math.Sqrt(varX) * math.Sqrt(varY))
-			} else if i == j {
-				mat[i][j] = 1.0
-			} else {
-				mat[i][j] = 0.0
-			}
-		}
-	}
-	return mat, nil
-}
-
+// SortPair is used for quantile sorting (metrics) but allocated in workspace.
 type SortPair struct {
 	S, R float64
 }
 
 type MathWorkspace struct {
-	OFI     []float64
+	// Pre-calculated vectors (Context)
+	DT     []float64
+	DP     []float64
+	LogRet []float64
+	RawTCI []float64
+
+	// Scratch for sorting/stats (Shared usage)
 	MeanBuf []float64
-	StdBuf  []float64
-	Tmp1    []float64
-	Tmp2    []float64
-	Tmp3    []float64
 	SortBuf []SortPair
 }
 
 func (ws *MathWorkspace) Ensure(n int) {
-	if cap(ws.OFI) < n {
-		ws.OFI = make([]float64, n)
+	if cap(ws.DT) < n {
+		ws.DT = make([]float64, n)
+		ws.DP = make([]float64, n)
+		ws.LogRet = make([]float64, n)
+		ws.RawTCI = make([]float64, n)
 		ws.MeanBuf = make([]float64, n)
-		ws.StdBuf = make([]float64, n)
-		ws.Tmp1 = make([]float64, n)
-		ws.Tmp2 = make([]float64, n)
-		ws.Tmp3 = make([]float64, n)
+		// Ensure SortBuf capacity
+		ws.SortBuf = make([]SortPair, n)
 	}
-	ws.OFI = ws.OFI[:n]
+	ws.DT = ws.DT[:n]
+	ws.DP = ws.DP[:n]
+	ws.LogRet = ws.LogRet[:n]
+	ws.RawTCI = ws.RawTCI[:n]
 	ws.MeanBuf = ws.MeanBuf[:n]
-	ws.StdBuf = ws.StdBuf[:n]
-	ws.Tmp1 = ws.Tmp1[:n]
-	ws.Tmp2 = ws.Tmp2[:n]
-	ws.Tmp3 = ws.Tmp3[:n]
+	ws.SortBuf = ws.SortBuf[:n]
 }
 
-// softClamp applies a Tanh saturation to smoothly bound values.
-// Preserves linearity near zero, compresses tails.
-// Returns: (clampedValue, isOutlier)
-func softClamp(v, limit float64) (float64, bool) {
-	if v > limit {
-		return limit * math.Tanh(v/limit), true
-	}
-	if v < -limit {
-		return limit * math.Tanh(v/limit), true
-	}
-	return v, false
+// Output Buffer Pool
+type SignalBuffers struct {
+	Data [][]float64
 }
 
-func Sign(v float64) float64 {
-	if v == 0 {
-		return 0
-	}
-	return math.Copysign(1, v)
-}
-
-// --- Core Primitive Engine (AggTrades -> Features) ---
-
-func ComputeFeaturesAndSignals(cols *DayColumns, dists []MathDist, signals [][]float64, fc *FeatureCorr, ws *MathWorkspace) {
-	n := cols.Count
-	if n == 0 {
-		return
-	}
-
-	if len(signals) < 36 {
-		panic("signals buffer too small")
-	}
-	for i := 0; i < 36; i++ {
-		if len(signals[i]) < n {
-			panic("signal row buffer too small")
+var SignalBufferPool = sync.Pool{
+	New: func() any {
+		return &SignalBuffers{
+			Data: make([][]float64, 0),
 		}
-	}
+	},
+}
 
-	if ws != nil {
-		ws.Ensure(n)
-	}
+// --- 2. The Bridge: Raw -> Math Context ---
 
-	prices := cols.Prices
-	qtys := cols.Qtys
-	sides := cols.Sides
+type MathContext struct {
+	Count int
+	// Raw (from DayColumns)
+	Prices  []float64
+	Qtys    []float64
+	Sides   []int8
+	Matches []uint16
+	// Derived (calculated in PrepareMathContext)
+	DT     []float64
+	DP     []float64
+	LogRet []float64
+	RawTCI []float64
+}
+
+// PrepareMathContext transforms the rigid DayColumns into the fluid MathContext.
+func PrepareMathContext(cols *DayColumns, ws *MathWorkspace) *MathContext {
+	n := cols.Count
+	ws.Ensure(n)
+
 	times := cols.Times
-	matches := cols.Matches
+	prices := cols.Prices
+	sides := cols.Sides
 
-	s0, s1, s2, s3 := signals[0][:n], signals[1][:n], signals[2][:n], signals[3][:n]
-	s4, s5, s6, s7 := signals[4][:n], signals[5][:n], signals[6][:n], signals[7][:n]
-	s8, s9, s10, s11 := signals[8][:n], signals[9][:n], signals[10][:n], signals[11][:n]
-	s12, s13, s14, s15 := signals[12][:n], signals[13][:n], signals[14][:n], signals[15][:n]
-	s16, s17, s18, s19 := signals[16][:n], signals[17][:n], signals[18][:n], signals[19][:n]
-	s20, s21, s22, s23 := signals[20][:n], signals[21][:n], signals[22][:n], signals[23][:n]
-	s24, s25, s26, s27 := signals[24][:n], signals[25][:n], signals[26][:n], signals[27][:n]
-	s28, s29, s30, s31 := signals[28][:n], signals[29][:n], signals[30][:n], signals[31][:n]
-	s32, s33, s34, s35 := signals[32][:n], signals[33][:n], signals[34][:n], signals[35][:n]
+	// Optimization: Pointers for BCE (Bounds Check Elimination)
+	pDT := ws.DT
+	pDP := ws.DP
+	pRet := ws.LogRet
+	pTci := ws.RawTCI
 
-	const minDTsec = 1e-3
-	const epsBps = 0.0001
-
-	prevP := prices[0]
 	prevT := times[0]
-
-	// Outlier tracking flags for current row
-	var oPress, oVel, oRes bool
+	prevP := prices[0]
+	const minDTsec = 1e-3
 
 	for i := 0; i < n; i++ {
-		p := prices[i]
-		q := qtys[i]
-		s := float64(sides[i])
-		m := float64(matches[i])
+		// 1. Delta Time
 		t := times[i]
-
-		dtRaw := float64(t-prevT) * 0.001
-		if dtRaw < minDTsec {
-			dtRaw = minDTsec
+		dSec := float64(t-prevT) * 0.001
+		if dSec < minDTsec {
+			dSec = minDTsec
 		}
-		dt := dtRaw
+		pDT[i] = dSec
 
-		dP := p - prevP
-		dynamicEps := p * epsBps
+		// 2. Delta Price & Returns
+		p := prices[i]
+		pDP[i] = p - prevP
 
-		// 1) Direction
-		tci := s
-		ofi := s * q
-		nfi := s * q * p
-
-		// 2) Impact
-		sweep := m
-		sweepDensity := 0.0
-		if m > 0 {
-			sweepDensity = q / m
+		if prevP > 0 && p > 0 {
+			pRet[i] = math.Log(p / prevP)
+		} else {
+			pRet[i] = 0
 		}
 
-		// Pressure: Soft Clamp at 5M units/sec
-		// Huge block trades in 1ms can trigger this.
-		pressure, isOP := softClamp(q/dt, 5_000_000.0)
-		oPress = isOP
+		// 3. Raw TCI (Cast int8 to float64)
+		pTci[i] = float64(sides[i])
 
-		// 3) Kinetics
-		// Velocity: Soft Clamp at 20% price move per second
-		velocity, isOV := softClamp(dP/dt, p*0.20)
-		oVel = isOV
-
-		// Resistance: (s*q) / dP
-		denom := dP + math.Copysign(dynamicEps, dP)
-		rawRes := (s * q) / denom
-		// Resistance: Soft Clamp at 1 Billion units/price_unit
-		resistance, isOR := softClamp(rawRes, 1_000_000_000.0)
-		oRes = isOR
-
-		// 4) Texture
-		logQty := math.Log1p(q)
-
-		// Unrolled Writes
-		s0[i] = tci
-		s1[i] = math.Abs(tci)
-		s2[i] = Sign(tci)
-		s3[i] = tci * tci
-
-		s4[i] = ofi
-		s5[i] = math.Abs(ofi)
-		s6[i] = Sign(ofi)
-		s7[i] = ofi * ofi
-
-		s8[i] = nfi
-		s9[i] = math.Abs(nfi)
-		s10[i] = Sign(nfi)
-		s11[i] = nfi * nfi
-
-		s12[i] = sweep
-		s13[i] = math.Abs(sweep)
-		s14[i] = Sign(sweep)
-		s15[i] = sweep * sweep
-
-		s16[i] = sweepDensity
-		s17[i] = math.Abs(sweepDensity)
-		s18[i] = Sign(sweepDensity)
-		s19[i] = sweepDensity * sweepDensity
-
-		s20[i] = pressure
-		s21[i] = math.Abs(pressure)
-		s22[i] = Sign(pressure)
-		s23[i] = pressure * pressure
-
-		s24[i] = velocity
-		s25[i] = math.Abs(velocity)
-		s26[i] = Sign(velocity)
-		s27[i] = velocity * velocity
-
-		s28[i] = resistance
-		s29[i] = math.Abs(resistance)
-		s30[i] = Sign(resistance)
-		s31[i] = resistance * resistance
-
-		s32[i] = logQty
-		s33[i] = math.Abs(logQty)
-		s34[i] = Sign(logQty)
-		s35[i] = logQty * logQty
-
-		prevP = p
 		prevT = t
-
-		// Flag outlier accumulation (done efficiently without branching inside array writes)
-		if oPress {
-			dists[20].Outliers++ // Pressure
-		}
-		if oVel {
-			dists[24].Outliers++ // Velocity
-		}
-		if oRes {
-			dists[28].Outliers++ // Resistance
-		}
+		prevP = p
 	}
 
-	// Update distributions
-	for fIdx := 0; fIdx < FeatureCount; fIdx++ {
-		sig := signals[fIdx]
-		d := &dists[fIdx]
+	return &MathContext{
+		Count:   n,
+		Prices:  prices,
+		Qtys:    cols.Qtys,
+		Sides:   sides,
+		Matches: cols.Matches,
+		DT:      pDT,
+		DP:      pDP,
+		LogRet:  pRet,
+		RawTCI:  pTci,
+	}
+}
 
-		for i := 0; i < n; i++ {
-			val := sig[i]
-			if math.IsNaN(val) || math.IsInf(val, 0) {
-				val = 0
-			}
-			d.Count++
-			d.Sum += val
-			d.SumSq += val * val
-			if val < d.Min {
-				d.Min = val
-			}
-			if val > d.Max {
-				d.Max = val
-			}
-			d.Last = val
+// --- 3. The 7 Survivors (Generators) ---
+
+type Generator interface {
+	Name() string
+	Reset()
+	Update(ctx *MathContext, out []float64)
+}
+
+// 1. Raw TCI (Baseline)
+type GenRawTCI struct{}
+
+func (g *GenRawTCI) Name() string { return "Raw_TCI" }
+func (g *GenRawTCI) Reset()       {}
+func (g *GenRawTCI) Update(ctx *MathContext, out []float64) {
+	copy(out, ctx.RawTCI)
+}
+
+// 2. Static Continuous-Time Kalman
+type GenStaticKalman struct {
+	x, p float64
+}
+
+func (g *GenStaticKalman) Name() string { return "Kalman_Static" }
+func (g *GenStaticKalman) Reset()       { g.x = 0; g.p = 1.0 }
+func (g *GenStaticKalman) Update(ctx *MathContext, out []float64) {
+	x, p := g.x, g.p
+	for i := 0; i < ctx.Count; i++ {
+		p = p + KalmanQStatic*ctx.DT[i]
+		k := p / (p + KalmanR)
+		y := ctx.RawTCI[i]
+		x = x + k*(y-x)
+		p = (1.0 - k) * p
+		out[i] = x
+	}
+	g.x, g.p = x, p
+}
+
+// 3. Adaptive Continuous-Time Kalman
+type GenAdaptiveKalman struct {
+	x, p float64
+}
+
+func (g *GenAdaptiveKalman) Name() string { return "Kalman_Adaptive" }
+func (g *GenAdaptiveKalman) Reset()       { g.x = 0; g.p = 1.0 }
+func (g *GenAdaptiveKalman) Update(ctx *MathContext, out []float64) {
+	x, p := g.x, g.p
+	for i := 0; i < ctx.Count; i++ {
+		errRaw := ctx.RawTCI[i] - x
+		qAdaptive := KalmanQBase + KalmanAlpha*(errRaw*errRaw)
+		p = p + qAdaptive*ctx.DT[i]
+		k := p / (p + KalmanR)
+		x = x + k*errRaw
+		p = (1.0 - k) * p
+		out[i] = x
+	}
+	g.x, g.p = x, p
+}
+
+// 4. Leaky Integrator (Pressure)
+type GenLeakyIntegrator struct {
+	s float64
+}
+
+func (g *GenLeakyIntegrator) Name() string { return "Pressure_TCI" }
+func (g *GenLeakyIntegrator) Reset()       { g.s = 0 }
+func (g *GenLeakyIntegrator) Update(ctx *MathContext, out []float64) {
+	s := g.s
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauPressure)
+		s = ctx.RawTCI[i] + s*decay
+		out[i] = s
+	}
+	g.s = s
+}
+
+// 5. Intensity Imbalance
+type GenIntensityImbalance struct {
+	lamBuy, lamSell float64
+}
+
+func (g *GenIntensityImbalance) Name() string { return "Intensity_Imb" }
+func (g *GenIntensityImbalance) Reset()       { g.lamBuy = 0; g.lamSell = 0 }
+func (g *GenIntensityImbalance) Update(ctx *MathContext, out []float64) {
+	lb, ls := g.lamBuy, g.lamSell
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauIntensity)
+		lb *= decay
+		ls *= decay
+		if ctx.RawTCI[i] > 0 {
+			lb += 1.0
+		} else {
+			ls += 1.0
+		}
+		sum := lb + ls
+		if sum < 1e-9 {
+			out[i] = 0
+		} else {
+			out[i] = (lb - ls) / sum
 		}
 	}
+	g.lamBuy, g.lamSell = lb, ls
+}
 
-	if fc != nil {
-		for i := 0; i < n; i++ {
-			fc.Count++
-			for f1 := 0; f1 < FeatureCount; f1++ {
-				v1 := signals[f1][i]
-				fc.SumX[f1] += v1
-				fc.SumSqX[f1] += v1 * v1
-				for f2 := 0; f2 < FeatureCount; f2++ {
-					v2 := signals[f2][i]
-					fc.SumProd[f1*FeatureCount+f2] += v1 * v2
-				}
+// 6. Instantaneous Volatility
+type GenInstantVol struct {
+	v float64
+}
+
+func (g *GenInstantVol) Name() string { return "Instant_Vol" }
+func (g *GenInstantVol) Reset()       { g.v = 0 }
+func (g *GenInstantVol) Update(ctx *MathContext, out []float64) {
+	v := g.v
+	for i := 0; i < ctx.Count; i++ {
+		decay := math.Exp(-ctx.DT[i] / TauVol)
+		r := ctx.LogRet[i]
+		v = (r * r) + v*decay
+		out[i] = math.Sqrt(v)
+	}
+	g.v = v
+}
+
+// 7. Regime Shift CUSUM
+type GenCUSUM struct {
+	cPos, cNeg float64
+}
+
+func (g *GenCUSUM) Name() string { return "Regime_CUSUM" }
+func (g *GenCUSUM) Reset()       { g.cPos = 0; g.cNeg = 0 }
+func (g *GenCUSUM) Update(ctx *MathContext, out []float64) {
+	cp, cn := g.cPos, g.cNeg
+	for i := 0; i < ctx.Count; i++ {
+		s := ctx.RawTCI[i]
+		cp = math.Max(0, cp+s-CusumDriftK)
+		cn = math.Min(0, cn+s+CusumDriftK)
+		res := 0.0
+		if cp > CusumResetH {
+			res = 1.0
+			cp = 0
+			cn = 0
+		} else if cn < -CusumResetH {
+			res = -1.0
+			cp = 0
+			cn = 0
+		} else {
+			if cp > -cn {
+				res = cp / CusumResetH
+			} else {
+				res = cn / CusumResetH
 			}
 		}
+		out[i] = res
 	}
+	g.cPos, g.cNeg = cp, cn
+}
+
+// --- Registry ---
+func GetCorePrimitives() []Generator {
+	return []Generator{
+		&GenRawTCI{},
+		&GenStaticKalman{},
+		&GenAdaptiveKalman{},
+		&GenLeakyIntegrator{},
+		&GenIntensityImbalance{},
+		&GenInstantVol{},
+		&GenCUSUM{},
+	}
+}
+
+// --- Statistical Structures (Kept for compatibility with test.go) ---
+type MathDist struct {
+	Count, Min, Max, Sum, SumSq, Last float64
+	Outliers                          int64
+}
+
+func InitMathDists(n int) []MathDist {
+	d := make([]MathDist, n)
+	for i := range d {
+		d[i].Min = math.MaxFloat64
+		d[i].Max = -math.MaxFloat64
+	}
+	return d
 }

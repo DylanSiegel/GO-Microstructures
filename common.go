@@ -12,22 +12,17 @@ import (
 	"unsafe"
 )
 
-// --- Shared Configuration ---
-
+// --- Infrastructure Constants ---
 const (
-	CPUThreads = 24
-	BaseDir    = "data"
-
-	// Input Data Layout (GNC-v3)
-	PxScale = 100_000_000.0
-	QtScale = 100_000_000.0
-
-	GNCChunkSize  = 65536
-	GNCMagic      = "GNC3"
-	GNCHeaderSize = 32
-	IdxMagic      = "QIDX"
-	IdxVersion    = 1
-
+	CPUThreads         = 24
+	BaseDir            = "data"
+	PxScale            = 100_000_000.0
+	QtScale            = 100_000_000.0
+	GNCChunkSize       = 65536
+	GNCMagic           = "GNC3"
+	GNCHeaderSize      = 32
+	IdxMagic           = "QIDX"
+	IdxVersion         = 1
 	DefaultDayCapacity = 1_500_000
 )
 
@@ -36,13 +31,13 @@ var SymbolHandle = unique.Make(func() string {
 	if s := os.Getenv("SYMBOL"); s != "" {
 		return s
 	}
-	return "ETHUSDT"
+	return "DOGEUSDT"
 }())
 
 func Symbol() string { return SymbolHandle.Value() }
 
-// --- OPTIMIZED DATA SCHEMA (SoA) ---
-
+// --- RAW DATA SCHEMA (SoA) ---
+// Matches the binary file layout.
 type DayColumns struct {
 	Count               int
 	Times               []int64
@@ -60,6 +55,7 @@ func (c *DayColumns) Reset() {
 	c.ScratchChunkOffsets = c.ScratchChunkOffsets[:0]
 }
 
+// Pool for Raw Data Memory
 var DayColumnPool = sync.Pool{
 	New: func() any {
 		return &DayColumns{
@@ -74,21 +70,7 @@ var DayColumnPool = sync.Pool{
 	},
 }
 
-// SignalBuffers holds fixed feature rows (SoA).
-type SignalBuffers struct {
-	Data [36][]float64
-}
-
-var SignalBufferPool = sync.Pool{
-	New: func() any {
-		sb := &SignalBuffers{}
-		for i := range sb.Data {
-			sb.Data[i] = make([]float64, 0, DefaultDayCapacity)
-		}
-		return sb
-	},
-}
-
+// Helper: Cast slice to bytes for binary writing
 func unsafeBytes[T any](s []T) []byte {
 	if len(s) == 0 {
 		return nil
@@ -97,7 +79,7 @@ func unsafeBytes[T any](s []T) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*elemSize)
 }
 
-// inflateGNCToColumns inflates GNC binary data with integrity checks.
+// inflateGNCToColumns loads the GNC3 blob into DayColumns.
 func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 	if len(rawBlob) < GNCHeaderSize {
 		return 0, false
@@ -186,9 +168,8 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 	cols.Sides = cols.Sides[:totalRows]
 	cols.Matches = cols.Matches[:totalRows]
 
-	// 4. PASS 2: Indexed Writes (Hot Loop)
+	// 4. PASS 2: Indexed Writes
 	writePtr := 0
-
 	for _, off := range chunkOffsets {
 		chunk := rawBlob[off:]
 		n := int(binary.LittleEndian.Uint16(chunk[0:2]))
@@ -211,10 +192,6 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 		ms := unsafe.Slice((*uint16)(unsafe.Pointer(&chunk[pMatches])), n)
 		sideBits := chunk[pSide:]
 
-		if len(sideBits) < (n+7)/8 {
-			return 0, false
-		}
-
 		dstT := cols.Times[writePtr : writePtr+n]
 		dstP := cols.Prices[writePtr : writePtr+n]
 		dstQ := cols.Qtys[writePtr : writePtr+n]
@@ -224,13 +201,10 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 		lastT := baseT
 		lastP := baseP
 
-		// HOT PATH: AVX-512 Friendly
 		for i := 0; i < n; i++ {
 			lastT += int64(tDeltas[i])
 			lastP += pDeltas[i]
 
-			// --- INTEGRITY CHECK ---
-			// Clamp price to positive non-zero to prevent Log(0) or div-by-zero later.
 			finalPrice := float64(lastP) / PxScale
 			if finalPrice <= 1e-9 {
 				finalPrice = 1e-9
@@ -248,7 +222,6 @@ func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
 
 			dstM[i] = ms[i]
 
-			// Branchless Side Decoding: (bit * 2) - 1
 			b := sideBits[i/8]
 			bit := int8((b >> (i % 8)) & 1)
 			dstS[i] = bit*2 - 1

@@ -1,0 +1,3325 @@
+--- File Tree Structure ---
+|-- data/
+|-- benchmark.go
+|-- check-data.go
+|-- common.go
+|-- data.go
+|-- main.go
+|-- math.go
+|-- metrics.go
+|-- test.go
+    |-- BTCUSDT/
+    |-- ETHUSDT/
+    |-- SOLUSDT/
+        |-- 2020/
+        |-- 2021/
+        |-- 2022/
+        |-- 2023/
+        |-- 2024/
+        |-- 2025/
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+        |-- 2020/
+        |-- 2021/
+        |-- 2022/
+        |-- 2023/
+        |-- 2024/
+        |-- 2025/
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+        |-- 2020/
+        |-- 2021/
+        |-- 2022/
+        |-- 2023/
+        |-- 2024/
+        |-- 2025/
+            |-- [09..12]/ (4 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+            |-- [01..12]/ (12 month dirs)
+
+// --- File: benchmark.go ---
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+	"math/rand/v2"
+	"os"
+	"runtime"
+	"runtime/debug"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"text/tabwriter"
+	"time"
+	"unsafe"
+)
+
+type threadContext struct {
+	d  []MathDist
+	fc FeatureCorr
+	s  [][]float64
+	ws *MathWorkspace
+	// Explicit padding to reduce False Sharing between hot per-thread states.
+	// Sized so that each context occupies at least ~128 bytes on 64-bit targets.
+	_ [120]byte
+}
+
+func runBenchmark() {
+	cores := runtime.GOMAXPROCS(0)
+
+	fmt.Println("\n>>> QUANT-GRADE STRESS TEST (SUSTAINED LOAD) <<<")
+	fmt.Printf("    Hardware: %d Threads | %s / %s | Zen 4 Optimization: ACTIVE\n", cores, runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("    Target  : Zero-Alloc Math Engine + Green Tea GC + AVX-512 Unrolling\n\n")
+
+	f, err := os.Create("Benchmark_Elite_Report.txt")
+	if err != nil {
+		fmt.Printf("[fatal] cannot create benchmark report: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	// 1. DATA GENERATION
+	rows := 1_000_000
+	fmt.Printf(" [1/5] Generating Synthetic Data (%d rows)... ", rows)
+	cols := generateSyntheticColumns(rows)
+	dists := InitMathDists()
+	fc := InitFeatureCorr()
+	signals := make([][]float64, FeatureCount)
+	for i := range signals {
+		signals[i] = make([]float64, rows)
+	}
+
+	ws := &MathWorkspace{}
+	fmt.Println("Done.")
+
+	// 2. LATENCY DISTRIBUTION
+	fmt.Println(" [2/5] Measuring Tail Latency (Jitter)...")
+	warmup := 5
+	samples := 50
+	latencies := make([]time.Duration, samples)
+
+	debug.SetGCPercent(-1)
+	runtime.GC()
+	debug.SetGCPercent(200)
+
+	for i := 0; i < warmup+samples; i++ {
+		start := time.Now()
+		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+		dur := time.Since(start)
+		if i >= warmup {
+			latencies[i-warmup] = dur
+		}
+	}
+	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+	p50 := latencies[samples/2]
+	p99Idx := int(math.Ceil(0.99*float64(samples))) - 1
+	if p99Idx >= samples {
+		p99Idx = samples - 1
+	}
+	p99 := latencies[p99Idx]
+
+	// 3. THROUGHPUT & BANDWIDTH
+	fmt.Println(" [3/5] Measuring Memory Bandwidth...")
+	inputBytes := uint64(rows * 27)
+	outputBytes := uint64(rows * FeatureCount * 8)
+	totalBytes := inputBytes + outputBytes
+
+	minDur := latencies[0]
+	if minDur == 0 {
+		minDur = 1
+	}
+	gbPerSec := (float64(totalBytes) / minDur.Seconds()) / 1024 / 1024 / 1024
+
+	// 4. GC PAUSE ANALYSIS
+	fmt.Println(" [4/5] Measuring Garbage Collector 'Stop-The-World' Pauses...")
+	var gcStats debug.GCStats
+	for i := 0; i < 20; i++ {
+		ComputeFeaturesAndSignals(cols, dists, signals, &fc, ws)
+	}
+	debug.ReadGCStats(&gcStats)
+	pauseTotal := gcStats.PauseTotal
+	numGC := gcStats.NumGC
+	var maxPause time.Duration
+	for _, p := range gcStats.Pause {
+		if p > maxPause {
+			maxPause = p
+		}
+	}
+
+	// 5. SCALABILITY
+	fmt.Println(" [5/5] Torture Test: All Cores Saturation (5 Seconds)...")
+	fmt.Println("        (Padding enabled to prevent False Sharing)")
+
+	// OPTIMIZATION: Slice of pointers to ensure heap separation
+	contexts := make([]*threadContext, cores)
+	for i := 0; i < cores; i++ {
+		contexts[i] = &threadContext{
+			d:  InitMathDists(),
+			fc: InitFeatureCorr(),
+			s:  make([][]float64, FeatureCount),
+			ws: &MathWorkspace{},
+		}
+		for k := range contexts[i].s {
+			contexts[i].s[k] = make([]float64, rows)
+		}
+	}
+
+	var wg sync.WaitGroup
+	var totalBatches atomic.Int64
+
+	runtime.GC()
+	stopChan := make(chan struct{})
+
+	for i := 0; i < cores; i++ {
+		wg.Add(1)
+		ctx := contexts[i] // Pointer copy
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stopChan:
+					return
+				default:
+					ComputeFeaturesAndSignals(cols, ctx.d, ctx.s, &ctx.fc, ctx.ws)
+					totalBatches.Add(1)
+				}
+			}
+		}()
+	}
+
+	startMulti := time.Now()
+	time.Sleep(5 * time.Second)
+	close(stopChan)
+	wg.Wait()
+	durMulti := time.Since(startMulti)
+
+	batchesDone := totalBatches.Load()
+	totalEvents := int64(rows) * batchesDone
+	throughputMulti := float64(totalEvents) / durMulti.Seconds()
+	flops := throughputMulti * 150.0 / 1_000_000_000.0
+
+	printEliteReport(os.Stdout, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
+	printEliteReport(f, p50, p99, gbPerSec, throughputMulti, cores, rows, numGC, maxPause, pauseTotal, flops)
+	DayColumnPool.Put(cols)
+}
+
+func printEliteReport(out *os.File, p50, p99 time.Duration, gbps, tput float64, cores, rows int, numGC int64, maxPause, totalPause time.Duration, flops float64) {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "\n==========================================================")
+	fmt.Fprintln(w, "             QUANTITATIVE PERFORMANCE METRICS             ")
+	fmt.Fprintln(w, "==========================================================")
+	fmt.Fprintf(w, "    Target Batch    : %d rows\n", rows)
+
+	fmt.Fprintln(w, "\n1. COMPUTE POWER")
+	fmt.Fprintf(w, "    Core Util       : %d Threads\n", cores)
+	fmt.Fprintf(w, "    Throughput      : %.0f rows/sec\n", tput)
+	fmt.Fprintf(w, "    Est. FLOPS      : %.2f GFLOPS\n", flops)
+	fmt.Fprintf(w, "    Daily Speed     : ~%.0f days/sec\n", tput/86400.0)
+
+	fmt.Fprintln(w, "\n2. LATENCY & MEMORY")
+	fmt.Fprintf(w, "    p50 Latency     : %v\n", p50)
+	fmt.Fprintf(w, "    p99 Latency     : %v\n", p99)
+	fmt.Fprintf(w, "    Effective B/W   : %.2f GB/s\n", gbps)
+
+	fmt.Fprintln(w, "\n3. GARBAGE COLLECTION")
+	fmt.Fprintf(w, "    Num GCs         : %d\n", numGC)
+	fmt.Fprintf(w, "    Pause Total     : %v\n", totalPause)
+	fmt.Fprintf(w, "    Max Pause       : %v\n", maxPause)
+	fmt.Fprintln(w, "==========================================================")
+	w.Flush()
+}
+
+func generateSyntheticColumns(rows int) *DayColumns {
+	cols := DayColumnPool.Get().(*DayColumns)
+	cols.Reset()
+
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 999))
+
+	baseTime := int64(1704067200000)
+	basePrice := 50000.0
+
+	if cap(cols.Times) < rows {
+		cols.Times = make([]int64, 0, rows)
+		cols.Prices = make([]float64, 0, rows)
+		cols.Qtys = make([]float64, 0, rows)
+		cols.Sides = make([]int8, 0, rows)
+		cols.Matches = make([]uint16, 0, rows)
+	}
+
+	cols.Times = cols.Times[:rows]
+	cols.Prices = cols.Prices[:rows]
+	cols.Qtys = cols.Qtys[:rows]
+	cols.Sides = cols.Sides[:rows]
+	cols.Matches = cols.Matches[:rows]
+
+	pTimes := unsafe.SliceData(cols.Times)
+	pPrices := unsafe.SliceData(cols.Prices)
+	pQtys := unsafe.SliceData(cols.Qtys)
+	pSides := unsafe.SliceData(cols.Sides)
+	pMatches := unsafe.SliceData(cols.Matches)
+
+	// //go:nocheckptr
+	for i := 0; i < rows; i++ {
+		*(*int64)(unsafe.Pointer(uintptr(unsafe.Pointer(pTimes)) + uintptr(i)*8)) = baseTime + int64(i*10)
+
+		if i > 0 {
+			basePrice += (rng.Float64() - 0.5) * 10.0
+		}
+		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pPrices)) + uintptr(i)*8)) = basePrice
+		*(*float64)(unsafe.Pointer(uintptr(unsafe.Pointer(pQtys)) + uintptr(i)*8)) = rng.Float64() * 2.0
+
+		s := int8(1)
+		if rng.Uint64()&1 == 0 {
+			s = -1
+		}
+		*(*int8)(unsafe.Pointer(uintptr(unsafe.Pointer(pSides)) + uintptr(i)*1)) = s
+		*(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(pMatches)) + uintptr(i)*2)) = 1
+	}
+	cols.Count = rows
+	return cols
+}
+```
+
+// --- End File: benchmark.go ---
+
+// --- File: check-data.go ---
+
+```go
+package main
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"io/fs"
+	"math"
+	"os"
+	"path/filepath"
+	"sort"
+	"text/tabwriter"
+	"time"
+)
+
+const (
+	GapThresholdSmall = 1 * time.Second
+	GapThresholdLarge = 60 * time.Second
+)
+
+type FileStats struct {
+	Date          string
+	Rows          int
+	GapCountSmall int
+	GapCountLarge int
+	MaxGap        time.Duration
+	MinPrice      float64
+	MaxPrice      float64
+	ZeroQtys      int
+	SizeMB        float64
+	Status        string
+}
+
+func runCheck() {
+	fmt.Println(">>> DATA FORENSICS REPORT | AUTO-DETECTED SYMBOLS <<<")
+	fmt.Printf("    Checking for gaps > %v and integrity issues...\n\n", GapThresholdLarge)
+
+	var symbols []string
+	for sym := range discoverSymbols() {
+		symbols = append(symbols, sym)
+	}
+	if len(symbols) == 0 {
+		fmt.Printf("[fatal] No symbols found in %s\n", BaseDir)
+		return
+	}
+	sort.Strings(symbols)
+
+	readBuf := make([]byte, 32*1024*1024)
+
+	for idx, sym := range symbols {
+		if idx > 0 {
+			fmt.Println()
+		}
+		runCheckForSymbol(sym, &readBuf)
+	}
+}
+
+func runCheckForSymbol(sym string, readBuf *[]byte) {
+	fmt.Printf(">>> DATA FORENSICS REPORT | Symbol: %s <<<\n", sym)
+	fmt.Printf("    Checking for gaps > %v and integrity issues...\n\n", GapThresholdLarge)
+
+	root := filepath.Join(BaseDir, sym)
+	var files []string
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Name() == "data.quantdev" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("[fatal] Error walking directory for %s: %v\n", sym, err)
+		return
+	}
+
+	if len(files) == 0 {
+		fmt.Printf("[warn] No data.quantdev files found for %s in %s\n", sym, root)
+		return
+	}
+	sort.Strings(files)
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "DATE\tROWS\tSIZE(MB)\tMIN_P\tMAX_P\tGAPS(>1s)\tGAPS(>60s)\tMAX_GAP\tSTATUS")
+	fmt.Fprintln(w, "----\t----\t--------\t-----\t-----\t---------\t----------\t-------\t------")
+
+	var totalRows int64
+	var totalFiles int
+	var issuesFound int
+
+	buf := *readBuf
+
+	for _, fPath := range files {
+		stats, newBuf := checkFile(fPath, buf)
+		buf = newBuf
+		totalRows += int64(stats.Rows)
+		totalFiles++
+
+		status := "OK"
+		if stats.Status != "" {
+			status = stats.Status
+			issuesFound++
+		} else if stats.GapCountLarge > 0 {
+			status = "WARN:Gaps"
+			issuesFound++
+		} else if stats.Rows == 0 {
+			status = "EMPTY"
+		}
+
+		minP := stats.MinPrice
+		maxP := stats.MaxPrice
+		if stats.Rows == 0 || stats.MinPrice == math.MaxFloat64 {
+			minP, maxP = 0, 0
+		}
+
+		fmt.Fprintf(w, "%s\t%d\t%.2f\t%.2f\t%.2f\t%d\t%d\t%s\t%s\n",
+			stats.Date, stats.Rows, stats.SizeMB, minP, maxP,
+			stats.GapCountSmall, stats.GapCountLarge, stats.MaxGap.Round(time.Millisecond), status)
+	}
+
+	w.Flush()
+	fmt.Printf("\nSUMMARY(%s): Scanned %d files | %d total rows | %d files with issues/warnings\n",
+		sym, totalFiles, totalRows, issuesFound)
+
+	*readBuf = buf
+}
+
+func checkFile(path string, buf []byte) (FileStats, []byte) {
+	dir := filepath.Dir(path)
+	monthDir := filepath.Base(dir)
+	yearDir := filepath.Base(filepath.Dir(dir))
+
+	stats := FileStats{
+		Date:     fmt.Sprintf("%s-%s", yearDir, monthDir),
+		MinPrice: math.MaxFloat64,
+		MaxPrice: 0,
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		stats.Status = "ERR:Open"
+		return stats, buf
+	}
+	defer f.Close()
+
+	var fileSize int64
+	if fi, err := f.Stat(); err == nil {
+		fileSize = fi.Size()
+		stats.SizeMB = float64(fi.Size()) / 1024.0 / 1024.0
+	}
+
+	colsAny := DayColumnPool.Get()
+	cols := colsAny.(*DayColumns)
+	defer DayColumnPool.Put(cols)
+
+	idxPath := filepath.Join(dir, "index.quantdev")
+	fIdx, err := os.Open(idxPath)
+	if err != nil {
+		stats.Status = "ERR:NoIndex"
+		return stats, buf
+	}
+	defer fIdx.Close()
+
+	var header [16]byte
+	if _, err := io.ReadFull(fIdx, header[:]); err != nil {
+		stats.Status = "ERR:IdxHead"
+		return stats, buf
+	}
+	if string(header[0:4]) != IdxMagic {
+		stats.Status = "ERR:IdxMagic"
+		return stats, buf
+	}
+	rawCount := binary.LittleEndian.Uint64(header[8:])
+	if rawCount > uint64(math.MaxInt64) {
+		stats.Status = "ERR:IdxCount"
+		return stats, buf
+	}
+	count := int64(rawCount)
+
+	const rowSize = 26
+	var row [rowSize]byte
+
+	for i := int64(0); i < count; i++ {
+		if _, err := io.ReadFull(fIdx, row[:]); err != nil {
+			stats.Status = "ERR:IdxRow"
+			break
+		}
+
+		blobOffset := int64(binary.LittleEndian.Uint64(row[2:]))
+		blobLen := int64(binary.LittleEndian.Uint64(row[10:]))
+
+		if blobLen <= 0 {
+			continue
+		}
+
+		// Extra safety: ensure the blob range fits within the data file.
+		if fileSize > 0 {
+			if blobOffset < 0 || blobLen < 0 || blobOffset > fileSize-blobLen {
+				stats.Status = "ERR:IdxRange"
+				continue
+			}
+		}
+
+		if int64(len(buf)) < blobLen {
+			buf = make([]byte, blobLen)
+		}
+
+		if _, err := f.Seek(blobOffset, io.SeekStart); err != nil {
+			stats.Status = "ERR:Seek"
+			continue
+		}
+
+		n, err := io.ReadFull(f, buf[:blobLen])
+		if err != nil || int64(n) != blobLen {
+			stats.Status = "ERR:ReadBlob"
+			continue
+		}
+
+		cols.Reset()
+		rowCount, ok := inflateGNCToColumns(buf[:blobLen], cols)
+		if !ok {
+			stats.Status = "ERR:Corrupt"
+			continue
+		}
+
+		stats.Rows += rowCount
+		if rowCount > 0 {
+			analyzeColumns(cols, &stats)
+		}
+	}
+
+	return stats, buf
+}
+
+func analyzeColumns(cols *DayColumns, stats *FileStats) {
+	times := cols.Times
+	prices := cols.Prices
+	qtys := cols.Qtys
+
+	for i, p := range prices {
+		if p < stats.MinPrice {
+			stats.MinPrice = p
+		}
+		if p > stats.MaxPrice {
+			stats.MaxPrice = p
+		}
+		if qtys[i] <= 0 {
+			stats.ZeroQtys++
+		}
+	}
+
+	for i := 1; i < len(times); i++ {
+		t1 := times[i-1]
+		t2 := times[i]
+
+		deltaMs := t2 - t1
+		if deltaMs < 0 {
+			stats.Status = "ERR:TimeBack"
+		}
+
+		dt := time.Duration(deltaMs) * time.Millisecond
+		if dt > stats.MaxGap {
+			stats.MaxGap = dt
+		}
+		if dt > GapThresholdLarge {
+			stats.GapCountLarge++
+		} else if dt > GapThresholdSmall {
+			stats.GapCountSmall++
+		}
+	}
+}
+```
+
+// --- End File: check-data.go ---
+
+// --- File: common.go ---
+
+```go
+package main
+
+import (
+	"encoding/binary"
+	"io"
+	"iter"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"unique"
+	"unsafe"
+)
+
+// --- Shared Configuration ---
+
+const (
+	CPUThreads = 24
+	BaseDir    = "data"
+
+	// Input Data Layout (GNC-v3)
+	PxScale = 100_000_000.0
+	QtScale = 100_000_000.0
+
+	GNCChunkSize  = 65536
+	GNCMagic      = "GNC3"
+	GNCHeaderSize = 32
+	IdxMagic      = "QIDX"
+	IdxVersion    = 1
+
+	DefaultDayCapacity = 1_500_000
+)
+
+// SymbolHandle interns the symbol string.
+var SymbolHandle = unique.Make(func() string {
+	if s := os.Getenv("SYMBOL"); s != "" {
+		return s
+	}
+	return "ETHUSDT"
+}())
+
+func Symbol() string { return SymbolHandle.Value() }
+
+// --- OPTIMIZED DATA SCHEMA (SoA) ---
+
+type DayColumns struct {
+	Count               int
+	Times               []int64
+	Prices              []float64
+	Qtys                []float64
+	Sides               []int8
+	Matches             []uint16
+	ScratchQtyDict      []float64
+	ScratchChunkOffsets []uint32
+}
+
+func (c *DayColumns) Reset() {
+	c.Count = 0
+	c.ScratchQtyDict = c.ScratchQtyDict[:0]
+	c.ScratchChunkOffsets = c.ScratchChunkOffsets[:0]
+}
+
+var DayColumnPool = sync.Pool{
+	New: func() any {
+		return &DayColumns{
+			Times:               make([]int64, 0, DefaultDayCapacity),
+			Prices:              make([]float64, 0, DefaultDayCapacity),
+			Qtys:                make([]float64, 0, DefaultDayCapacity),
+			Sides:               make([]int8, 0, DefaultDayCapacity),
+			Matches:             make([]uint16, 0, DefaultDayCapacity),
+			ScratchQtyDict:      make([]float64, 0, 4096),
+			ScratchChunkOffsets: make([]uint32, 0, 128),
+		}
+	},
+}
+
+// SignalBuffers holds fixed feature rows (SoA).
+type SignalBuffers struct {
+	Data [36][]float64
+}
+
+var SignalBufferPool = sync.Pool{
+	New: func() any {
+		sb := &SignalBuffers{}
+		for i := range sb.Data {
+			sb.Data[i] = make([]float64, 0, DefaultDayCapacity)
+		}
+		return sb
+	},
+}
+
+func unsafeBytes[T any](s []T) []byte {
+	if len(s) == 0 {
+		return nil
+	}
+	elemSize := int(unsafe.Sizeof(*new(T)))
+	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*elemSize)
+}
+
+// inflateGNCToColumns inflates GNC binary data with integrity checks.
+func inflateGNCToColumns(rawBlob []byte, cols *DayColumns) (int, bool) {
+	if len(rawBlob) < GNCHeaderSize {
+		return 0, false
+	}
+	if string(rawBlob[0:4]) != GNCMagic {
+		return 0, false
+	}
+
+	// 1. Metadata Parsing
+	footerOffset := binary.LittleEndian.Uint64(rawBlob[24:32])
+	if footerOffset >= uint64(len(rawBlob)) {
+		return 0, false
+	}
+
+	dictBlob := rawBlob[footerOffset:]
+	if len(dictBlob) < 4 {
+		return 0, false
+	}
+
+	dictCount := binary.LittleEndian.Uint32(dictBlob[0:4])
+	ptr := 4
+
+	if uint64(ptr)+uint64(dictCount)*8+4 > uint64(len(dictBlob)) {
+		return 0, false
+	}
+
+	if cap(cols.ScratchQtyDict) < int(dictCount) {
+		cols.ScratchQtyDict = make([]float64, 0, int(dictCount))
+	}
+	qtyDict := cols.ScratchQtyDict[:dictCount]
+
+	for i := 0; i < int(dictCount); i++ {
+		qRaw := binary.LittleEndian.Uint64(dictBlob[ptr : ptr+8])
+		qtyDict[i] = float64(qRaw) / QtScale
+		ptr += 8
+	}
+
+	if len(dictBlob) < ptr+4 {
+		return 0, false
+	}
+	chunkCount := binary.LittleEndian.Uint32(dictBlob[ptr : ptr+4])
+	ptr += 4
+
+	if uint64(ptr)+uint64(chunkCount)*4 > uint64(len(dictBlob)) {
+		return 0, false
+	}
+
+	if cap(cols.ScratchChunkOffsets) < int(chunkCount) {
+		cols.ScratchChunkOffsets = make([]uint32, 0, int(chunkCount))
+	}
+	chunkOffsets := cols.ScratchChunkOffsets[:chunkCount]
+
+	for i := 0; i < int(chunkCount); i++ {
+		chunkOffsets[i] = binary.LittleEndian.Uint32(dictBlob[ptr : ptr+4])
+		ptr += 4
+	}
+
+	// 2. PASS 1: Calculate Total Rows
+	totalRows := 0
+	const ChunkHeaderSize = 18
+
+	for _, off := range chunkOffsets {
+		if uint64(off)+ChunkHeaderSize > uint64(len(rawBlob)) {
+			return 0, false
+		}
+		n := int(binary.LittleEndian.Uint16(rawBlob[off : off+2]))
+		totalRows += n
+	}
+
+	if totalRows == 0 {
+		cols.Count = 0
+		return 0, true
+	}
+
+	// 3. One-Time Allocation
+	if cap(cols.Times) < totalRows {
+		cols.Times = make([]int64, totalRows)
+		cols.Prices = make([]float64, totalRows)
+		cols.Qtys = make([]float64, totalRows)
+		cols.Sides = make([]int8, totalRows)
+		cols.Matches = make([]uint16, totalRows)
+	}
+	cols.Times = cols.Times[:totalRows]
+	cols.Prices = cols.Prices[:totalRows]
+	cols.Qtys = cols.Qtys[:totalRows]
+	cols.Sides = cols.Sides[:totalRows]
+	cols.Matches = cols.Matches[:totalRows]
+
+	// 4. PASS 2: Indexed Writes (Hot Loop)
+	writePtr := 0
+
+	for _, off := range chunkOffsets {
+		chunk := rawBlob[off:]
+		n := int(binary.LittleEndian.Uint16(chunk[0:2]))
+		baseT := int64(binary.LittleEndian.Uint64(chunk[2:10]))
+		baseP := int64(binary.LittleEndian.Uint64(chunk[10:18]))
+
+		pTime := ChunkHeaderSize
+		pPrice := pTime + n*4
+		pQty := pPrice + n*8
+		pMatches := pQty + n*4
+		pSide := pMatches + n*2
+
+		if pSide > len(chunk) {
+			return 0, false
+		}
+
+		tDeltas := unsafe.Slice((*int32)(unsafe.Pointer(&chunk[pTime])), n)
+		pDeltas := unsafe.Slice((*int64)(unsafe.Pointer(&chunk[pPrice])), n)
+		qIDs := unsafe.Slice((*uint32)(unsafe.Pointer(&chunk[pQty])), n)
+		ms := unsafe.Slice((*uint16)(unsafe.Pointer(&chunk[pMatches])), n)
+		sideBits := chunk[pSide:]
+
+		if len(sideBits) < (n+7)/8 {
+			return 0, false
+		}
+
+		dstT := cols.Times[writePtr : writePtr+n]
+		dstP := cols.Prices[writePtr : writePtr+n]
+		dstQ := cols.Qtys[writePtr : writePtr+n]
+		dstS := cols.Sides[writePtr : writePtr+n]
+		dstM := cols.Matches[writePtr : writePtr+n]
+
+		lastT := baseT
+		lastP := baseP
+
+		// HOT PATH: AVX-512 Friendly
+		for i := 0; i < n; i++ {
+			lastT += int64(tDeltas[i])
+			lastP += pDeltas[i]
+
+			// --- INTEGRITY CHECK ---
+			// Clamp price to positive non-zero to prevent Log(0) or div-by-zero later.
+			finalPrice := float64(lastP) / PxScale
+			if finalPrice <= 1e-9 {
+				finalPrice = 1e-9
+			}
+
+			dstT[i] = lastT
+			dstP[i] = finalPrice
+
+			qID := int(qIDs[i])
+			if qID < len(qtyDict) {
+				dstQ[i] = qtyDict[qID]
+			} else {
+				dstQ[i] = 0
+			}
+
+			dstM[i] = ms[i]
+
+			// Branchless Side Decoding: (bit * 2) - 1
+			b := sideBits[i/8]
+			bit := int8((b >> (i % 8)) & 1)
+			dstS[i] = bit*2 - 1
+		}
+		writePtr += n
+	}
+
+	cols.Count = totalRows
+	return totalRows, true
+}
+
+type ofiTask struct {
+	Year  int
+	Month int
+	Day   int
+}
+
+func discoverSymbols() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		entries, err := os.ReadDir(BaseDir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if name == "" || name[0] == '.' || name == "features" {
+				continue
+			}
+			if !yield(name) {
+				return
+			}
+		}
+	}
+}
+
+func discoverTasks(sym string) iter.Seq[ofiTask] {
+	return func(yield func(ofiTask) bool) {
+		root := filepath.Join(BaseDir, sym)
+		years, err := os.ReadDir(root)
+		if err != nil {
+			return
+		}
+
+		for _, yEnt := range years {
+			if !yEnt.IsDir() {
+				continue
+			}
+			yName := yEnt.Name()
+			if len(yName) != 4 {
+				continue
+			}
+			year, err := strconv.Atoi(yName)
+			if err != nil {
+				continue
+			}
+			yearDir := filepath.Join(root, yName)
+
+			months, err := os.ReadDir(yearDir)
+			if err != nil {
+				continue
+			}
+			for _, mEnt := range months {
+				if !mEnt.IsDir() {
+					continue
+				}
+				mName := mEnt.Name()
+				if len(mName) != 2 {
+					continue
+				}
+				month, err := strconv.Atoi(mName)
+				if err != nil {
+					continue
+				}
+
+				idxPath := filepath.Join(yearDir, mName, "index.quantdev")
+				f, err := os.Open(idxPath)
+				if err != nil {
+					continue
+				}
+
+				var hdr [16]byte
+				if _, err := io.ReadFull(f, hdr[:]); err != nil {
+					f.Close()
+					continue
+				}
+				if string(hdr[0:4]) != IdxMagic {
+					f.Close()
+					continue
+				}
+				count := binary.LittleEndian.Uint64(hdr[8:])
+
+				var row [26]byte
+				for i := uint64(0); i < count; i++ {
+					if _, err := io.ReadFull(f, row[:]); err != nil {
+						break
+					}
+					day := int(binary.LittleEndian.Uint16(row[0:]))
+					task := ofiTask{Year: year, Month: month, Day: day}
+					if !yield(task) {
+						f.Close()
+						return
+					}
+				}
+				f.Close()
+			}
+		}
+	}
+}
+```
+
+// --- End File: common.go ---
+
+// --- File: data.go ---
+
+```go
+package main
+
+import (
+	"archive/zip"
+	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+	"weak"
+)
+
+const (
+	HostData   = "data.binance.vision"
+	S3Prefix   = "data/futures/um"
+	DataSet    = "aggTrades"
+	FallbackDt = "2020-01-01"
+)
+
+var (
+	httpClient *http.Client
+	stopEvent  atomic.Bool
+
+	// OPTIMIZED: Weak Map for Named Locks
+	namedLocks = struct {
+		sync.Mutex
+		m map[string]weak.Pointer[sync.Mutex]
+	}{m: make(map[string]weak.Pointer[sync.Mutex])}
+)
+
+var errNotFound = fmt.Errorf("404")
+
+// GetDirLock uses weak pointers to prevent memory leaks on infinite symbols.
+func GetDirLock(path string) *sync.Mutex {
+	namedLocks.Lock()
+	defer namedLocks.Unlock()
+
+	if wp, ok := namedLocks.m[path]; ok {
+		if ptr := wp.Value(); ptr != nil {
+			return ptr
+		}
+		delete(namedLocks.m, path)
+	}
+
+	mu := &sync.Mutex{}
+	namedLocks.m[path] = weak.Make(mu)
+	return mu
+}
+
+// --- Ingestion Memory Pool ---
+
+type IngestBuffers struct {
+	Ts       []int64
+	Ps       []int64
+	Qs       []uint64
+	Ms       []uint16
+	Buys     []bool
+	TDeltas  []int32
+	PDeltas  []int64
+	QIDs     []uint32
+	SideBits []byte
+}
+
+var ingestBufferPool = sync.Pool{
+	New: func() any {
+		const cap = 1_000_000
+		return &IngestBuffers{
+			Ts:       make([]int64, 0, cap),
+			Ps:       make([]int64, 0, cap),
+			Qs:       make([]uint64, 0, cap),
+			Ms:       make([]uint16, 0, cap),
+			Buys:     make([]bool, 0, cap),
+			TDeltas:  make([]int32, GNCChunkSize),
+			PDeltas:  make([]int64, GNCChunkSize),
+			QIDs:     make([]uint32, GNCChunkSize),
+			SideBits: make([]byte, (GNCChunkSize+7)/8),
+		}
+	},
+}
+
+func (b *IngestBuffers) Reset() {
+	b.Ts = b.Ts[:0]
+	b.Ps = b.Ps[:0]
+	b.Qs = b.Qs[:0]
+	b.Ms = b.Ms[:0]
+	b.Buys = b.Buys[:0]
+}
+
+func init() {
+	tr := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	httpClient = &http.Client{
+		Transport: tr,
+		Timeout:   30 * time.Second,
+	}
+}
+
+func runData() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	go func() {
+		<-sigChan
+		stopEvent.Store(true)
+		fmt.Println("\n[warn] Stopping gracefully...")
+	}()
+
+	fmt.Printf("--- GNC-v3 Ingestion (Streaming) | Symbol: %s ---\n", Symbol())
+
+	start, err := time.Parse("2006-01-02", FallbackDt)
+	if err != nil {
+		fmt.Printf("[fatal] invalid FallbackDt: %v\n", err)
+		return
+	}
+
+	end := time.Now().UTC().AddDate(0, 0, -1)
+	var days []time.Time
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		days = append(days, d)
+	}
+
+	fmt.Printf("[job] Processing %d days using %d threads.\n", len(days), CPUThreads)
+
+	jobs := make(chan time.Time, len(days))
+	results := make(chan string, len(days))
+	var wg sync.WaitGroup
+
+	for i := 0; i < CPUThreads; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for d := range jobs {
+				if stopEvent.Load() {
+					return
+				}
+				results <- processDay(d)
+			}
+		}()
+	}
+
+	for _, d := range days {
+		jobs <- d
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+
+	stats := make(map[string]int)
+	for r := range results {
+		parts := strings.SplitN(r, " ", 2)
+		key := parts[0]
+		stats[key]++
+		if strings.HasPrefix(key, "error") {
+			fmt.Println(r)
+		}
+	}
+	fmt.Printf("\n[done] %v\n", stats)
+}
+
+func processDay(d time.Time) string {
+	y, m, day := d.Year(), int(d.Month()), d.Day()
+	dateStr := d.Format("2006-01-02")
+
+	dirPath := filepath.Join(BaseDir, Symbol(), fmt.Sprintf("%04d", y), fmt.Sprintf("%02d", m))
+	idxPath := filepath.Join(dirPath, "index.quantdev")
+	dataPath := filepath.Join(dirPath, "data.quantdev")
+
+	mu := GetDirLock(dirPath)
+	mu.Lock()
+	indexed := isIndexed(idxPath, day)
+	mu.Unlock()
+	if indexed {
+		return "skip"
+	}
+
+	sym := Symbol()
+	url := fmt.Sprintf("https://%s/%s/daily/%s/%s/%s-%s-%04d-%02d-%02d.zip",
+		HostData, S3Prefix, DataSet, sym, sym, DataSet, y, m, day)
+
+	zipBytes, err := download(url)
+	if err != nil {
+		if err == errNotFound {
+			return "missing " + dateStr
+		}
+		return fmt.Sprintf("error_dl %s %v", dateStr, err)
+	}
+
+	bufs := ingestBufferPool.Get().(*IngestBuffers)
+	bufs.Reset()
+	defer ingestBufferPool.Put(bufs)
+
+	gncBlob, count, err := streamZipToGNCBlob(zipBytes, bufs)
+	if err != nil {
+		return fmt.Sprintf("error_parse %s %v", dateStr, err)
+	}
+	if count == 0 {
+		return "empty " + dateStr
+	}
+
+	sum := sha256.Sum256(gncBlob)
+	cSum := binary.LittleEndian.Uint64(sum[:8])
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if isIndexed(idxPath, day) {
+		return "skip_race"
+	}
+
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		return "error_mkdir"
+	}
+
+	fData, err := os.OpenFile(dataPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return "error_io"
+	}
+
+	stat, err := fData.Stat()
+	if err != nil {
+		fData.Close()
+		return "error_stat"
+	}
+	offset := stat.Size()
+
+	if _, err := fData.Write(gncBlob); err != nil {
+		fData.Close()
+		return "error_write"
+	}
+	fData.Close()
+
+	if err := updateIndex(idxPath, day, offset, len(gncBlob), cSum); err != nil {
+		return "error_idx"
+	}
+
+	return "ok " + dateStr
+}
+
+func streamZipToGNCBlob(zipData []byte, bufs *IngestBuffers) ([]byte, uint64, error) {
+	r, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for _, f := range r.File {
+		if !strings.HasSuffix(f.Name, ".csv") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			continue
+		}
+		count, err := scanCSVToBuffers(rc, bufs)
+		rc.Close()
+		if err != nil {
+			return nil, 0, err
+		}
+		return encodeGNC(bufs, count)
+	}
+	return nil, 0, fmt.Errorf("no csv found")
+}
+
+// scanCSVToBuffers using AVX-512 optimized bytes.IndexByte
+func scanCSVToBuffers(r io.Reader, bufs *IngestBuffers) (int, error) {
+	scanner := bufio.NewScanner(r)
+	// Larger buffer to minimize IO calls
+	buf := make([]byte, 0, 1024*1024)
+	scanner.Buffer(buf, 10*1024*1024)
+
+	count := 0
+	firstLine := true
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		if firstLine {
+			firstLine = false
+			if line[0] < '0' || line[0] > '9' {
+				continue
+			}
+		}
+
+		// Vectorized Parsing Logic
+		var price, ts int64
+		var qty uint64
+		var firstID, lastID int64
+		var isBuyerMaker bool
+
+		start := 0
+		col := 0
+
+		// Unrolled column parser
+		for col < 7 {
+			idx := bytes.IndexByte(line[start:], ',')
+			var field []byte
+			if idx == -1 {
+				field = line[start:]
+			} else {
+				field = line[start : start+idx]
+			}
+
+			switch col {
+			case 1:
+				price = fastParseFixed(field)
+			case 2:
+				rawQ := fastParseFixed(field)
+				if rawQ < 0 {
+					rawQ = -rawQ
+				}
+				qty = uint64(rawQ)
+			case 3:
+				firstID = fastParseInt(field)
+			case 4:
+				lastID = fastParseInt(field)
+			case 5:
+				ts = fastParseInt(field)
+			case 6:
+				if len(field) > 0 {
+					c := field[0]
+					if c == 't' || c == 'T' {
+						isBuyerMaker = true
+					}
+				}
+			}
+
+			if idx == -1 {
+				break
+			}
+			start += idx + 1
+			col++
+		}
+
+		bufs.Ps = append(bufs.Ps, price)
+		bufs.Qs = append(bufs.Qs, qty)
+		bufs.Ts = append(bufs.Ts, ts)
+		bufs.Buys = append(bufs.Buys, !isBuyerMaker)
+
+		matches := int64(1)
+		if lastID >= firstID {
+			matches = lastID - firstID + 1
+		}
+		if matches > 65535 {
+			matches = 65535
+		}
+		bufs.Ms = append(bufs.Ms, uint16(matches))
+
+		count++
+	}
+
+	return count, scanner.Err()
+}
+
+func encodeGNC(bufs *IngestBuffers, count int) ([]byte, uint64, error) {
+	if count == 0 {
+		return nil, 0, nil
+	}
+
+	var buf bytes.Buffer
+	buf.Grow(count * 20)
+
+	baseTime := bufs.Ts[0]
+	basePrice := bufs.Ps[0]
+
+	buf.WriteString(GNCMagic)
+
+	var scratch [8]byte
+	binary.LittleEndian.PutUint32(scratch[:4], uint32(count))
+	buf.Write(scratch[:4])
+
+	binary.LittleEndian.PutUint64(scratch[:], uint64(baseTime))
+	buf.Write(scratch[:])
+
+	binary.LittleEndian.PutUint64(scratch[:], uint64(basePrice))
+	buf.Write(scratch[:])
+
+	footerOffsetPos := buf.Len()
+	binary.LittleEndian.PutUint64(scratch[:], 0)
+	buf.Write(scratch[:])
+
+	qtyDict := make(map[uint64]uint32, 4096)
+	var dictLog []uint64
+	chunkOffsets := make([]uint32, 0)
+
+	for i := 0; i < count; i += GNCChunkSize {
+		end := i + GNCChunkSize
+		if end > count {
+			end = count
+		}
+		chunkOffsets = append(chunkOffsets, uint32(buf.Len()))
+		if err := encodeChunk(&buf, bufs, i, end, qtyDict, &dictLog); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	footerStart := buf.Len()
+	binary.LittleEndian.PutUint32(scratch[:4], uint32(len(dictLog)))
+	buf.Write(scratch[:4])
+	for _, q := range dictLog {
+		binary.LittleEndian.PutUint64(scratch[:], q)
+		buf.Write(scratch[:])
+	}
+	binary.LittleEndian.PutUint32(scratch[:4], uint32(len(chunkOffsets)))
+	buf.Write(scratch[:4])
+	for _, off := range chunkOffsets {
+		binary.LittleEndian.PutUint32(scratch[:4], off)
+		buf.Write(scratch[:4])
+	}
+	finalBytes := buf.Bytes()
+	binary.LittleEndian.PutUint64(finalBytes[footerOffsetPos:], uint64(footerStart))
+	return finalBytes, uint64(count), nil
+}
+
+func encodeChunk(w *bytes.Buffer, bufs *IngestBuffers, start, end int, dict map[uint64]uint32, log *[]uint64) error {
+	count := end - start
+	ts := bufs.Ts[start:end]
+	ps := bufs.Ps[start:end]
+	qs := bufs.Qs[start:end]
+	ms := bufs.Ms[start:end]
+	buys := bufs.Buys[start:end]
+
+	tDeltas := bufs.TDeltas[:count]
+	pDeltas := bufs.PDeltas[:count]
+	qIDs := bufs.QIDs[:count]
+	sideBits := bufs.SideBits[:(count+7)/8]
+
+	for k := range sideBits {
+		sideBits[k] = 0
+	}
+
+	chunkBaseT := ts[0]
+	chunkBaseP := ps[0]
+	var lastT, lastP int64 = chunkBaseT, chunkBaseP
+
+	tDeltas[0] = 0
+	pDeltas[0] = 0
+
+	getID := func(q uint64) uint32 {
+		if id, ok := dict[q]; ok {
+			return id
+		}
+		id := uint32(len(*log))
+		dict[q] = id
+		*log = append(*log, q)
+		return id
+	}
+
+	qIDs[0] = getID(qs[0])
+	if buys[0] {
+		sideBits[0] |= 1
+	}
+
+	for i := 1; i < count; i++ {
+		dt := ts[i] - lastT
+		dp := ps[i] - lastP
+		if dt > 2147483647 || dt < -2147483648 {
+			return fmt.Errorf("time delta overflow")
+		}
+		tDeltas[i] = int32(dt)
+		lastT = ts[i]
+		pDeltas[i] = dp
+		lastP = ps[i]
+		qIDs[i] = getID(qs[i])
+		if buys[i] {
+			sideBits[i/8] |= (1 << (i % 8))
+		}
+	}
+
+	var head [18]byte
+	binary.LittleEndian.PutUint16(head[0:], uint16(count))
+	binary.LittleEndian.PutUint64(head[2:], uint64(chunkBaseT))
+	binary.LittleEndian.PutUint64(head[10:], uint64(chunkBaseP))
+	w.Write(head[:])
+
+	w.Write(unsafeBytes(tDeltas))
+	w.Write(unsafeBytes(pDeltas))
+	w.Write(unsafeBytes(qIDs))
+	w.Write(unsafeBytes(ms))
+	w.Write(sideBits)
+
+	return nil
+}
+
+// Fast fixed-point parser, avoids float conversion overhead
+func fastParseFixed(b []byte) int64 {
+	var num int64
+	var seenDot bool
+	var dec int
+	for _, c := range b {
+		if c == '.' {
+			seenDot = true
+			continue
+		}
+		if c < '0' || c > '9' {
+			continue
+		}
+		num = num*10 + int64(c-'0')
+		if seenDot {
+			dec++
+		}
+	}
+	for dec < 8 {
+		num *= 10
+		dec++
+	}
+	return num
+}
+
+func fastParseInt(b []byte) int64 {
+	var n int64
+	for _, c := range b {
+		if c < '0' || c > '9' {
+			continue
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n
+}
+
+func download(url string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		resp, err := httpClient.Get(url)
+		if err != nil {
+			lastErr = err
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode == 404 {
+			resp.Body.Close()
+			return nil, errNotFound
+		}
+		if resp.StatusCode != 200 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		return data, nil
+	}
+	return nil, lastErr
+}
+
+func isIndexed(idxPath string, day int) bool {
+	f, err := os.Open(idxPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	return checkIndex(f, day)
+}
+
+func checkIndex(f *os.File, day int) bool {
+	var hdr [16]byte
+	if _, err := io.ReadFull(f, hdr[:]); err != nil {
+		return false
+	}
+	if string(hdr[0:4]) != IdxMagic {
+		return false
+	}
+	count := binary.LittleEndian.Uint64(hdr[8:])
+	var row [26]byte
+	for i := uint64(0); i < count; i++ {
+		if _, err := io.ReadFull(f, row[:]); err != nil {
+			return false
+		}
+		if int(binary.LittleEndian.Uint16(row[0:])) == day {
+			return true
+		}
+	}
+	return false
+}
+
+func updateIndex(idxPath string, day int, offset int64, length int, csum uint64) error {
+	f, err := os.OpenFile(idxPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if stat.Size() == 0 {
+		var hdr [16]byte
+		copy(hdr[0:], IdxMagic)
+		binary.LittleEndian.PutUint32(hdr[4:], uint32(IdxVersion))
+		if _, err := f.Write(hdr[:]); err != nil {
+			return err
+		}
+	}
+
+	if _, err := f.Seek(8, io.SeekStart); err != nil {
+		return err
+	}
+	var count uint64
+	if err := binary.Read(f, binary.LittleEndian, &count); err != nil {
+		return err
+	}
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return err
+	}
+	var row [26]byte
+	binary.LittleEndian.PutUint16(row[0:], uint16(day))
+	binary.LittleEndian.PutUint64(row[2:], uint64(offset))
+	binary.LittleEndian.PutUint64(row[10:], uint64(length))
+	binary.LittleEndian.PutUint64(row[18:], csum)
+	if _, err := f.Write(row[:]); err != nil {
+		return err
+	}
+	if _, err := f.Seek(8, io.SeekStart); err != nil {
+		return err
+	}
+	return binary.Write(f, binary.LittleEndian, count+1)
+}
+
+func loadRawGNC(sym string, t ofiTask, buf *[]byte) ([]byte, bool) {
+	dir := filepath.Join(BaseDir, sym, fmt.Sprintf("%04d", t.Year), fmt.Sprintf("%02d", t.Month))
+	idxPath := filepath.Join(dir, "index.quantdev")
+	dataPath := filepath.Join(dir, "data.quantdev")
+
+	offset, length := findBlobOffset(idxPath, t.Day)
+	if length == 0 {
+		return nil, false
+	}
+
+	f, err := os.Open(dataPath)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, false
+	}
+	if int64(offset+length) > st.Size() {
+		return nil, false
+	}
+
+	need := int(length)
+	if cap(*buf) < need {
+		*buf = make([]byte, need)
+	}
+	b := (*buf)[:need]
+
+	if _, err := f.Seek(int64(offset), io.SeekStart); err != nil {
+		return nil, false
+	}
+	if _, err := io.ReadFull(f, b); err != nil {
+		return nil, false
+	}
+	return b, true
+}
+
+func findBlobOffset(idxPath string, day int) (uint64, uint64) {
+	f, err := os.Open(idxPath)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+
+	var hdr [16]byte
+	if _, err := io.ReadFull(f, hdr[:]); err != nil {
+		return 0, 0
+	}
+	count := binary.LittleEndian.Uint64(hdr[8:])
+	var row [26]byte
+	for i := uint64(0); i < count; i++ {
+		if _, err := io.ReadFull(f, row[:]); err != nil {
+			break
+		}
+		if int(binary.LittleEndian.Uint16(row[0:])) == day {
+			return binary.LittleEndian.Uint64(row[2:]), binary.LittleEndian.Uint64(row[10:])
+		}
+	}
+	return 0, 0
+}
+```
+
+// --- End File: data.go ---
+
+// --- File: main.go ---
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"runtime/debug"
+	"time"
+)
+
+func main() {
+	runtime.GOMAXPROCS(CPUThreads)
+	const ramLimit = 24 * 1024 * 1024 * 1024
+	debug.SetMemoryLimit(ramLimit)
+
+	if len(os.Args) < 2 {
+		printHelp()
+		os.Exit(1)
+	}
+
+	start := time.Now()
+
+	fmt.Printf("%s | Env: %s/%s | Threads: %d | RAM Limit: 24GB | GOGC: %s | GOAMD64: %s | GOEXP: %s\n",
+		runtime.Version(),
+		runtime.GOOS, runtime.GOARCH,
+		runtime.GOMAXPROCS(0),
+		os.Getenv("GOGC"),
+		os.Getenv("GOAMD64"),
+		os.Getenv("GOEXPERIMENT"),
+	)
+
+	cmd := os.Args[1]
+
+	switch cmd {
+	case "test":
+		runTest()
+	case "check":
+		runCheck()
+	case "data":
+		runData()
+	case "bench":
+		runBenchmark()
+	default:
+		fmt.Printf("Unknown command: %s\n", cmd)
+		printHelp()
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n[sys] Execution Time: %s | Mem: %s\n", time.Since(start), getMemUsage())
+}
+
+func printHelp() {
+	fmt.Println("Usage: go run . [command]")
+	fmt.Println("  data   - Download and process raw aggTrades data (GNC-v3)")
+	fmt.Println("  test   - Unified metrics + math study on GNC data")
+	fmt.Println("  bench  - Synthetic end-to-end performance benchmark")
+	fmt.Println("  check  - Scan GNC data for gaps / integrity issues")
+}
+
+func getMemUsage() string {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return fmt.Sprintf("%d MB", m.Alloc/1024/1024)
+}
+```
+
+// --- End File: main.go ---
+
+// --- File: math.go ---
+
+```go
+package main
+
+import (
+	"math"
+)
+
+// --- Configuration & Globals ---
+
+var FeatureNames = []string{
+	"TCI", "TCI_abs", "TCI_sign", "TCI_sq",
+	"OFI", "OFI_abs", "OFI_sign", "OFI_sq",
+	"NFI", "NFI_abs", "NFI_sign", "NFI_sq",
+	"Sweep", "Sweep_abs", "Sweep_sign", "Sweep_sq",
+	"SweepDensity", "SweepDensity_abs", "SweepDensity_sign", "SweepDensity_sq",
+	"Pressure", "Pressure_abs", "Pressure_sign", "Pressure_sq",
+	"Velocity", "Velocity_abs", "Velocity_sign", "Velocity_sq",
+	"Resistance", "Resistance_abs", "Resistance_sign", "Resistance_sq",
+	"LogQty", "LogQty_abs", "LogQty_sign", "LogQty_sq",
+}
+
+var FeatureCount = len(FeatureNames)
+
+func MetricFeatureNames() []string { return FeatureNames }
+
+// --- Statistical Structures ---
+
+type MathDist struct {
+	Count    float64
+	Min      float64
+	Max      float64
+	Sum      float64
+	SumSq    float64
+	Last     float64
+	Outliers int64 // New: Track soft-clipped values
+}
+
+func InitMathDists() []MathDist {
+	d := make([]MathDist, FeatureCount)
+	for i := range d {
+		d[i].Min = math.MaxFloat64
+		d[i].Max = -math.MaxFloat64
+	}
+	return d
+}
+
+type FeatureCorr struct {
+	Count   float64
+	SumProd []float64
+	SumX    []float64
+	SumSqX  []float64
+}
+
+func InitFeatureCorr() FeatureCorr {
+	return FeatureCorr{
+		SumProd: make([]float64, FeatureCount*FeatureCount),
+		SumX:    make([]float64, FeatureCount),
+		SumSqX:  make([]float64, FeatureCount),
+	}
+}
+
+func BuildFeatureCorrMatrix(fc FeatureCorr) ([][]float64, error) {
+	n := FeatureCount
+	mat := make([][]float64, n)
+	for i := range mat {
+		mat[i] = make([]float64, n)
+	}
+	if fc.Count <= 1 {
+		return mat, nil
+	}
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			idx := i*n + j
+			meanX := fc.SumX[i] / fc.Count
+			meanY := fc.SumX[j] / fc.Count
+			varX := (fc.SumSqX[i] / fc.Count) - meanX*meanX
+			varY := (fc.SumSqX[j] / fc.Count) - meanY*meanY
+			cov := (fc.SumProd[idx] / fc.Count) - meanX*meanY
+
+			if varX > 1e-18 && varY > 1e-18 {
+				mat[i][j] = cov / (math.Sqrt(varX) * math.Sqrt(varY))
+			} else if i == j {
+				mat[i][j] = 1.0
+			} else {
+				mat[i][j] = 0.0
+			}
+		}
+	}
+	return mat, nil
+}
+
+type SortPair struct {
+	S, R float64
+}
+
+type MathWorkspace struct {
+	OFI     []float64
+	MeanBuf []float64
+	StdBuf  []float64
+	Tmp1    []float64
+	Tmp2    []float64
+	Tmp3    []float64
+	SortBuf []SortPair
+}
+
+func (ws *MathWorkspace) Ensure(n int) {
+	if cap(ws.OFI) < n {
+		ws.OFI = make([]float64, n)
+		ws.MeanBuf = make([]float64, n)
+		ws.StdBuf = make([]float64, n)
+		ws.Tmp1 = make([]float64, n)
+		ws.Tmp2 = make([]float64, n)
+		ws.Tmp3 = make([]float64, n)
+	}
+	ws.OFI = ws.OFI[:n]
+	ws.MeanBuf = ws.MeanBuf[:n]
+	ws.StdBuf = ws.StdBuf[:n]
+	ws.Tmp1 = ws.Tmp1[:n]
+	ws.Tmp2 = ws.Tmp2[:n]
+	ws.Tmp3 = ws.Tmp3[:n]
+}
+
+// softClamp applies a Tanh saturation to smoothly bound values.
+// Preserves linearity near zero, compresses tails.
+// Returns: (clampedValue, isOutlier)
+func softClamp(v, limit float64) (float64, bool) {
+	if v > limit {
+		return limit * math.Tanh(v/limit), true
+	}
+	if v < -limit {
+		return limit * math.Tanh(v/limit), true
+	}
+	return v, false
+}
+
+func Sign(v float64) float64 {
+	if v == 0 {
+		return 0
+	}
+	return math.Copysign(1, v)
+}
+
+// --- Core Primitive Engine (AggTrades -> Features) ---
+
+func ComputeFeaturesAndSignals(cols *DayColumns, dists []MathDist, signals [][]float64, fc *FeatureCorr, ws *MathWorkspace) {
+	n := cols.Count
+	if n == 0 {
+		return
+	}
+
+	if len(signals) < 36 {
+		panic("signals buffer too small")
+	}
+	for i := 0; i < 36; i++ {
+		if len(signals[i]) < n {
+			panic("signal row buffer too small")
+		}
+	}
+
+	if ws != nil {
+		ws.Ensure(n)
+	}
+
+	prices := cols.Prices
+	qtys := cols.Qtys
+	sides := cols.Sides
+	times := cols.Times
+	matches := cols.Matches
+
+	s0, s1, s2, s3 := signals[0][:n], signals[1][:n], signals[2][:n], signals[3][:n]
+	s4, s5, s6, s7 := signals[4][:n], signals[5][:n], signals[6][:n], signals[7][:n]
+	s8, s9, s10, s11 := signals[8][:n], signals[9][:n], signals[10][:n], signals[11][:n]
+	s12, s13, s14, s15 := signals[12][:n], signals[13][:n], signals[14][:n], signals[15][:n]
+	s16, s17, s18, s19 := signals[16][:n], signals[17][:n], signals[18][:n], signals[19][:n]
+	s20, s21, s22, s23 := signals[20][:n], signals[21][:n], signals[22][:n], signals[23][:n]
+	s24, s25, s26, s27 := signals[24][:n], signals[25][:n], signals[26][:n], signals[27][:n]
+	s28, s29, s30, s31 := signals[28][:n], signals[29][:n], signals[30][:n], signals[31][:n]
+	s32, s33, s34, s35 := signals[32][:n], signals[33][:n], signals[34][:n], signals[35][:n]
+
+	const minDTsec = 1e-3
+	const epsBps = 0.0001
+
+	prevP := prices[0]
+	prevT := times[0]
+
+	// Outlier tracking flags for current row
+	var oPress, oVel, oRes bool
+
+	for i := 0; i < n; i++ {
+		p := prices[i]
+		q := qtys[i]
+		s := float64(sides[i])
+		m := float64(matches[i])
+		t := times[i]
+
+		dtRaw := float64(t-prevT) * 0.001
+		if dtRaw < minDTsec {
+			dtRaw = minDTsec
+		}
+		dt := dtRaw
+
+		dP := p - prevP
+		dynamicEps := p * epsBps
+
+		// 1) Direction
+		tci := s
+		ofi := s * q
+		nfi := s * q * p
+
+		// 2) Impact
+		sweep := m
+		sweepDensity := 0.0
+		if m > 0 {
+			sweepDensity = q / m
+		}
+
+		// Pressure: Soft Clamp at 5M units/sec
+		// Huge block trades in 1ms can trigger this.
+		pressure, isOP := softClamp(q/dt, 5_000_000.0)
+		oPress = isOP
+
+		// 3) Kinetics
+		// Velocity: Soft Clamp at 20% price move per second
+		velocity, isOV := softClamp(dP/dt, p*0.20)
+		oVel = isOV
+
+		// Resistance: (s*q) / dP
+		denom := dP + math.Copysign(dynamicEps, dP)
+		rawRes := (s * q) / denom
+		// Resistance: Soft Clamp at 1 Billion units/price_unit
+		resistance, isOR := softClamp(rawRes, 1_000_000_000.0)
+		oRes = isOR
+
+		// 4) Texture
+		logQty := math.Log1p(q)
+
+		// Unrolled Writes
+		s0[i] = tci
+		s1[i] = math.Abs(tci)
+		s2[i] = Sign(tci)
+		s3[i] = tci * tci
+
+		s4[i] = ofi
+		s5[i] = math.Abs(ofi)
+		s6[i] = Sign(ofi)
+		s7[i] = ofi * ofi
+
+		s8[i] = nfi
+		s9[i] = math.Abs(nfi)
+		s10[i] = Sign(nfi)
+		s11[i] = nfi * nfi
+
+		s12[i] = sweep
+		s13[i] = math.Abs(sweep)
+		s14[i] = Sign(sweep)
+		s15[i] = sweep * sweep
+
+		s16[i] = sweepDensity
+		s17[i] = math.Abs(sweepDensity)
+		s18[i] = Sign(sweepDensity)
+		s19[i] = sweepDensity * sweepDensity
+
+		s20[i] = pressure
+		s21[i] = math.Abs(pressure)
+		s22[i] = Sign(pressure)
+		s23[i] = pressure * pressure
+
+		s24[i] = velocity
+		s25[i] = math.Abs(velocity)
+		s26[i] = Sign(velocity)
+		s27[i] = velocity * velocity
+
+		s28[i] = resistance
+		s29[i] = math.Abs(resistance)
+		s30[i] = Sign(resistance)
+		s31[i] = resistance * resistance
+
+		s32[i] = logQty
+		s33[i] = math.Abs(logQty)
+		s34[i] = Sign(logQty)
+		s35[i] = logQty * logQty
+
+		prevP = p
+		prevT = t
+
+		// Flag outlier accumulation (done efficiently without branching inside array writes)
+		if oPress {
+			dists[20].Outliers++ // Pressure
+		}
+		if oVel {
+			dists[24].Outliers++ // Velocity
+		}
+		if oRes {
+			dists[28].Outliers++ // Resistance
+		}
+	}
+
+	// Update distributions
+	for fIdx := 0; fIdx < FeatureCount; fIdx++ {
+		sig := signals[fIdx]
+		d := &dists[fIdx]
+
+		for i := 0; i < n; i++ {
+			val := sig[i]
+			if math.IsNaN(val) || math.IsInf(val, 0) {
+				val = 0
+			}
+			d.Count++
+			d.Sum += val
+			d.SumSq += val * val
+			if val < d.Min {
+				d.Min = val
+			}
+			if val > d.Max {
+				d.Max = val
+			}
+			d.Last = val
+		}
+	}
+
+	if fc != nil {
+		for i := 0; i < n; i++ {
+			fc.Count++
+			for f1 := 0; f1 < FeatureCount; f1++ {
+				v1 := signals[f1][i]
+				fc.SumX[f1] += v1
+				fc.SumSqX[f1] += v1 * v1
+				for f2 := 0; f2 < FeatureCount; f2++ {
+					v2 := signals[f2][i]
+					fc.SumProd[f1*FeatureCount+f2] += v1 * v2
+				}
+			}
+		}
+	}
+}
+```
+
+// --- End File: math.go ---
+
+// --- File: metrics.go ---
+
+```go
+package main
+
+import (
+	"math"
+	"slices"
+)
+
+const (
+	// Realistic Taker Fee: 2.5 basis points (0.025%)
+	// This makes PnL calculations meaningful.
+	FeeBps = 2.5
+)
+
+type MetricStats struct {
+	Count        int
+	ICPearson    float64
+	IC_TStat     float64
+	Sharpe       float64
+	HitRate      float64
+	BreakevenBps float64
+	AutoCorr     float64
+	AutoCorrAbs  float64
+	AvgSegLen    float64
+	MaxSegLen    float64
+
+	MeanSig float64
+	StdSig  float64
+	MeanRet float64
+	StdRet  float64
+	MeanPnL float64
+	StdPnL  float64
+}
+
+type Moments struct {
+	Count          float64
+	SumSig         float64
+	SumRet         float64
+	SumProd        float64
+	SumSqSig       float64
+	SumSqRet       float64
+	SumPnL         float64
+	SumSqPnL       float64
+	Hits           float64
+	ValidHits      float64
+	SumAbsDeltaSig float64
+	SumProdLag     float64
+	SumAbsSig      float64
+	SumAbsProdLag  float64
+	SegCount       float64
+	SegLenTotal    float64
+	SegLenMax      float64
+}
+
+func (m *Moments) Add(m2 Moments) {
+	m.Count += m2.Count
+	m.SumSig += m2.SumSig
+	m.SumRet += m2.SumRet
+	m.SumProd += m2.SumProd
+	m.SumSqSig += m2.SumSqSig
+	m.SumSqRet += m2.SumSqRet
+	m.SumPnL += m2.SumPnL
+	m.SumSqPnL += m2.SumSqPnL
+	m.Hits += m2.Hits
+	m.ValidHits += m2.ValidHits
+	m.SumAbsDeltaSig += m2.SumAbsDeltaSig
+	m.SumProdLag += m2.SumProdLag
+	m.SumAbsSig += m2.SumAbsSig
+	m.SumAbsProdLag += m2.SumAbsProdLag
+	m.SegCount += m2.SegCount
+	m.SegLenTotal += m2.SegLenTotal
+	if m2.SegLenMax > m.SegLenMax {
+		m.SegLenMax = m2.SegLenMax
+	}
+}
+
+type DrawdownState struct {
+	CumGross   float64
+	PeakGross  float64
+	MaxDDGross float64
+
+	CumNet   float64
+	PeakNet  float64
+	MaxDDNet float64
+
+	MinNet float64
+	MaxNet float64
+}
+
+type FeeMoments struct {
+	Count    float64
+	SumNet   float64
+	SumSqNet float64
+}
+
+func (fm *FeeMoments) Add(m2 FeeMoments) {
+	fm.Count += m2.Count
+	fm.SumNet += m2.SumNet
+	fm.SumSqNet += m2.SumSqNet
+}
+
+type PnLExtras struct {
+	NetMean    float64
+	NetStd     float64
+	NetSharpe  float64
+	MaxDDGross float64
+	MaxDDNet   float64
+}
+
+func updatePnLPath(sigs, rets []float64, state *DrawdownState, fm *FeeMoments) {
+	n := len(sigs)
+	if n == 0 || len(rets) < n {
+		return
+	}
+
+	prevPos := 0.0
+	// Fee is per unit of turnover.
+	// FeeBps = 2.5 -> 0.00025.
+	// If signal is Z-Score, it's roughly "units of risk".
+	// We assume 1 unit of signal = 1 unit of notional for fee calculation.
+	feePerUnit := FeeBps / 10000.0
+
+	_ = sigs[n-1]
+	_ = rets[n-1]
+
+	firstNet := true
+
+	for i := 0; i < n; i++ {
+		pos := sigs[i]
+		r := rets[i]
+
+		// Gross PnL
+		gross := pos * r
+		state.CumGross += gross
+		if state.CumGross > state.PeakGross {
+			state.PeakGross = state.CumGross
+		}
+		dd := state.PeakGross - state.CumGross
+		if dd > state.MaxDDGross {
+			state.MaxDDGross = dd
+		}
+
+		// Fee on position change
+		dPos := pos - prevPos
+		if dPos < 0 {
+			dPos = -dPos
+		}
+		fee := feePerUnit * dPos
+
+		net := gross - fee
+		state.CumNet += net
+		if state.CumNet > state.PeakNet {
+			state.PeakNet = state.CumNet
+		}
+		ddNet := state.PeakNet - state.CumNet
+		if ddNet > state.MaxDDNet {
+			state.MaxDDNet = ddNet
+		}
+
+		if firstNet {
+			state.MinNet = state.CumNet
+			state.MaxNet = state.CumNet
+			firstNet = false
+		} else {
+			if state.CumNet < state.MinNet {
+				state.MinNet = state.CumNet
+			}
+			if state.CumNet > state.MaxNet {
+				state.MaxNet = state.CumNet
+			}
+		}
+
+		fm.Count++
+		fm.SumNet += net
+		fm.SumSqNet += net * net
+
+		prevPos = pos
+	}
+}
+
+func CalcMomentsVectors(sigs, rets []float64) Moments {
+	var m Moments
+	n := len(sigs)
+	if n == 0 || len(rets) < n {
+		return m
+	}
+
+	var sumSig, sumRet, sumProd, sumSqSig, sumSqRet, sumPnL, sumSqPnL, sumAbsSig float64
+
+	_ = rets[n-1]
+	_ = sigs[n-1]
+
+	for i := 0; i < n; i++ {
+		s := sigs[i]
+		r := rets[i]
+
+		sumSig += s
+		sumRet += r
+		sumProd += s * r
+		sumSqSig += s * s
+		sumSqRet += r * r
+
+		pnl := s * r
+		sumPnL += pnl
+		sumSqPnL += pnl * pnl
+
+		absS := s
+		if absS < 0 {
+			absS = -absS
+		}
+		sumAbsSig += absS
+	}
+
+	m.Count = float64(n)
+	m.SumSig = sumSig
+	m.SumRet = sumRet
+	m.SumProd = sumProd
+	m.SumSqSig = sumSqSig
+	m.SumSqRet = sumSqRet
+	m.SumPnL = sumPnL
+	m.SumSqPnL = sumSqPnL
+	m.SumAbsSig = sumAbsSig
+
+	var prevSig float64
+	var prevSign float64
+	var curSegLen float64
+
+	var hits, validHits, sumAbsDelta, sumProdLag, sumAbsProdLag float64
+	var segCount, segLenTotal, segLenMax float64
+
+	for i := 0; i < n; i++ {
+		s := sigs[i]
+		r := rets[i]
+
+		if s != 0 && r != 0 {
+			validHits++
+			if (s > 0 && r > 0) || (s < 0 && r < 0) {
+				hits++
+			}
+		}
+
+		if i > 0 {
+			d := s - prevSig
+			if d < 0 {
+				d = -d
+			}
+			sumAbsDelta += d
+			sumProdLag += s * prevSig
+
+			absPrev := prevSig
+			if absPrev < 0 {
+				absPrev = -absPrev
+			}
+			absS := s
+			if absS < 0 {
+				absS = -absS
+			}
+			sumAbsProdLag += absS * absPrev
+		}
+
+		sign := 0.0
+		if s > 0 {
+			sign = 1.0
+		} else if s < 0 {
+			sign = -1.0
+		}
+
+		if sign != 0 {
+			if prevSign == sign {
+				curSegLen++
+			} else {
+				if curSegLen > 0 {
+					segCount++
+					segLenTotal += curSegLen
+					if curSegLen > segLenMax {
+						segLenMax = curSegLen
+					}
+				}
+				curSegLen = 1
+			}
+		} else {
+			if curSegLen > 0 {
+				segCount++
+				segLenTotal += curSegLen
+				if curSegLen > segLenMax {
+					segLenMax = curSegLen
+				}
+				curSegLen = 0
+			}
+		}
+		prevSig = s
+		prevSign = sign
+	}
+
+	if curSegLen > 0 {
+		segCount++
+		segLenTotal += curSegLen
+		if curSegLen > segLenMax {
+			segLenMax = curSegLen
+		}
+	}
+
+	m.Hits = hits
+	m.ValidHits = validHits
+	m.SumAbsDeltaSig = sumAbsDelta
+	m.SumProdLag = sumProdLag
+	m.SumAbsProdLag = sumAbsProdLag
+	m.SegCount = segCount
+	m.SegLenTotal = segLenTotal
+	m.SegLenMax = segLenMax
+
+	return m
+}
+
+func FinalizeMetrics(m Moments, dailyICs []float64) MetricStats {
+	if m.Count <= 1 {
+		return MetricStats{Count: int(m.Count)}
+	}
+	ms := MetricStats{Count: int(m.Count)}
+
+	num := m.Count*m.SumProd - m.SumSig*m.SumRet
+	denX := m.Count*m.SumSqSig - m.SumSig*m.SumSig
+	denY := m.Count*m.SumSqRet - m.SumRet*m.SumRet
+	if denX > 0 && denY > 0 {
+		ms.ICPearson = num / math.Sqrt(denX*denY)
+	}
+
+	ms.MeanSig = m.SumSig / m.Count
+	varSig := (m.SumSqSig / m.Count) - ms.MeanSig*ms.MeanSig
+	if varSig < 0 {
+		varSig = 0
+	}
+	ms.StdSig = math.Sqrt(varSig)
+
+	ms.MeanRet = m.SumRet / m.Count
+	varRet := (m.SumSqRet / m.Count) - ms.MeanRet*ms.MeanRet
+	if varRet < 0 {
+		varRet = 0
+	}
+	ms.StdRet = math.Sqrt(varRet)
+
+	ms.MeanPnL = m.SumPnL / m.Count
+	varPnL := (m.SumSqPnL / m.Count) - ms.MeanPnL*ms.MeanPnL
+	if varPnL < 0 {
+		varPnL = 0
+	}
+	ms.StdPnL = math.Sqrt(varPnL)
+	if varPnL > 1e-18 {
+		ms.Sharpe = ms.MeanPnL / ms.StdPnL
+	}
+
+	if m.ValidHits > 0 {
+		ms.HitRate = m.Hits / m.ValidHits
+	}
+	if m.SumAbsDeltaSig > 1e-18 {
+		ms.BreakevenBps = (m.SumPnL / m.SumAbsDeltaSig) * 10000.0
+	}
+
+	if varSig > 1e-18 {
+		covLag := (m.SumProdLag / m.Count) - ms.MeanSig*ms.MeanSig
+		ms.AutoCorr = covLag / varSig
+	}
+
+	if m.Count > 0 {
+		meanAbs := m.SumAbsSig / m.Count
+		covAbs := (m.SumAbsProdLag / m.Count) - meanAbs*meanAbs
+		varAbs := (m.SumSqSig / m.Count) - meanAbs*meanAbs
+		if varAbs > 1e-18 {
+			ms.AutoCorrAbs = covAbs / varAbs
+		}
+	}
+
+	if m.SegCount > 0 {
+		ms.AvgSegLen = m.SegLenTotal / m.SegCount
+	}
+	ms.MaxSegLen = m.SegLenMax
+
+	if len(dailyICs) > 1 {
+		var sum, sumSq float64
+		n := float64(len(dailyICs))
+		for _, v := range dailyICs {
+			sum += v
+			sumSq += v * v
+		}
+		mean := sum / n
+		variance := (sumSq / n) - mean*mean
+		if variance > 1e-18 {
+			stdDev := math.Sqrt(variance)
+			ms.IC_TStat = mean / (stdDev / math.Sqrt(n))
+		}
+	}
+
+	return ms
+}
+
+type BucketResult struct {
+	ID        int
+	AvgSig    float64
+	AvgRetBps float64
+	Count     int
+}
+
+func ComputeQuantilesStrided(sigs, rets []float64, numBuckets, stride int, scratch *MathWorkspace) []BucketResult {
+	n := len(sigs)
+	if n == 0 || numBuckets <= 0 {
+		return nil
+	}
+
+	if n < 10000 {
+		stride = 1
+	} else if stride < 1 {
+		stride = 1
+	}
+
+	estSize := n / stride
+
+	if cap(scratch.SortBuf) < estSize {
+		scratch.SortBuf = make([]SortPair, estSize)
+	}
+	pairs := scratch.SortBuf[:0]
+
+	for i := 0; i < n; i += stride {
+		pairs = append(pairs, SortPair{S: sigs[i], R: rets[i]})
+	}
+	if len(pairs) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(pairs, func(a, b SortPair) int {
+		if a.S < b.S {
+			return -1
+		}
+		if a.S > b.S {
+			return 1
+		}
+		return 0
+	})
+
+	subN := len(pairs)
+	results := make([]BucketResult, numBuckets)
+	bucketSize := subN / numBuckets
+	if bucketSize == 0 {
+		bucketSize = 1
+	}
+
+	for b := 0; b < numBuckets; b++ {
+		start := b * bucketSize
+		end := start + bucketSize
+		if b == numBuckets-1 || end > subN {
+			end = subN
+		}
+
+		var sumS, sumR float64
+		count := 0
+		for i := start; i < end; i++ {
+			sumS += pairs[i].S
+			sumR += pairs[i].R
+			count++
+		}
+		if count > 0 {
+			results[b] = BucketResult{
+				ID:        b + 1,
+				AvgSig:    sumS / float64(count),
+				AvgRetBps: (sumR / float64(count)) * 10000.0,
+				Count:     count * stride,
+			}
+		}
+	}
+	return results
+}
+
+type BucketAgg struct {
+	Count     int
+	SumSig    float64
+	SumRetBps float64
+}
+
+func (ba *BucketAgg) Add(br BucketResult) {
+	if br.Count <= 0 {
+		return
+	}
+	ba.Count += br.Count
+	ba.SumSig += br.AvgSig * float64(br.Count)
+	ba.SumRetBps += br.AvgRetBps * float64(br.Count)
+}
+
+func (ba BucketAgg) Finalize(id int) BucketResult {
+	if ba.Count == 0 {
+		return BucketResult{ID: id}
+	}
+	den := float64(ba.Count)
+	return BucketResult{
+		ID:        id,
+		AvgSig:    ba.SumSig / den,
+		AvgRetBps: ba.SumRetBps / den,
+		Count:     ba.Count,
+	}
+}
+
+func ComputeBucketMonotonicity(bucketAggs []BucketAgg) float64 {
+	var brs []BucketResult
+	for i, agg := range bucketAggs {
+		br := agg.Finalize(i + 1)
+		if br.Count > 0 {
+			brs = append(brs, br)
+		}
+	}
+	n := len(brs)
+	if n < 2 {
+		return math.NaN()
+	}
+
+	type kv struct {
+		idx int
+		val float64
+	}
+	ranks := make([]kv, n)
+	for i, br := range brs {
+		ranks[i] = kv{idx: i, val: br.AvgRetBps}
+	}
+
+	slices.SortFunc(ranks, func(a, b kv) int {
+		switch {
+		case a.val < b.val:
+			return -1
+		case a.val > b.val:
+			return 1
+		default:
+			return 0
+		}
+	})
+
+	yRank := make([]float64, n)
+	for rank, kv := range ranks {
+		yRank[kv.idx] = float64(rank + 1)
+	}
+
+	var sumD2 float64
+	for i := 0; i < n; i++ {
+		xRank := float64(i + 1)
+		d := xRank - yRank[i]
+		sumD2 += d * d
+	}
+	nf := float64(n)
+	return 1.0 - (6.0*sumD2)/(nf*(nf*nf-1.0))
+}
+
+func summarizeICs(ics []float64) (mean, tstat float64) {
+	n := len(ics)
+	if n == 0 {
+		return 0, 0
+	}
+	var sum, sumSq float64
+	for _, v := range ics {
+		sum += v
+		sumSq += v * v
+	}
+	nf := float64(n)
+	mean = sum / nf
+	variance := (sumSq / nf) - mean*mean
+	if variance <= 1e-18 {
+		return mean, 0
+	}
+	std := math.Sqrt(variance)
+	tstat = mean / (std / math.Sqrt(nf))
+	return
+}
+```
+
+// --- End File: metrics.go ---
+
+// --- File: test.go ---
+
+```go
+// --- File: test.go ---
+package main
+
+import (
+	"fmt"
+	"math"
+	"os"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+func writeMetricsLog(f *os.File, msg string) {
+	fmt.Print(msg)
+	_, _ = f.WriteString(msg)
+}
+
+var DecayHorizons = []int{1, 5, 10, 50}
+var LatencyHorizonsMs = []int64{10}
+
+type SignalSummary struct {
+	Symbol       string
+	SignalName   string
+	ICPearson    float64
+	ICTStat      float64
+	SharpeGross  float64
+	NetSharpe    float64
+	BreakevenBps float64
+	Monotonicity float64
+	MaxDDNet     float64
+}
+
+type DailyStats struct {
+	Moments       Moments
+	IC            float64
+	BucketResults []BucketResult
+
+	DecayICs   []float64
+	LatencyICs []float64
+
+	NetPL_Total float64
+	NetPL_Min   float64
+	NetPL_Max   float64
+	MaxDD_Intra float64
+
+	GrossDD_Max float64
+
+	NetPnLMoments FeeMoments
+}
+
+type TaskResult struct {
+	DayIndex int
+	Stats    []DailyStats
+}
+
+func runTest() {
+	start := time.Now()
+	fmt.Println(">>> UNIFIED STUDY: METRICS + MATH (NORMALIZED + SOFT CLAMP) <<<")
+	// FeeBps is defined in metrics.go, accessible here since same package
+	fmt.Printf("[config] Threads=%d | Fee=%v bps\n", CPUThreads, FeeBps)
+
+	var symbols []string
+	for sym := range discoverSymbols() {
+		symbols = append(symbols, sym)
+	}
+	if len(symbols) == 0 {
+		fmt.Printf("[fatal] No symbols found in %s\n", BaseDir)
+		return
+	}
+	fmt.Printf("[init] Found %d symbols: %v\n", len(symbols), symbols)
+
+	reportFile, err := os.Create("Unified_Report_Norm.txt")
+	if err != nil {
+		fmt.Printf("[fatal] cannot create Unified_Report_Norm.txt: %v\n", err)
+		return
+	}
+	defer reportFile.Close()
+
+	writeMetricsLog(reportFile, fmt.Sprintf("Unified Study (Normalized) Start: %s\n", time.Now().Format(time.RFC3339)))
+
+	totalDays := 0
+	var allSummaries []SignalSummary
+
+	for _, sym := range symbols {
+		banner := fmt.Sprintf("\n%s\n>>> SYMBOL: %s <<<\n%s\n",
+			strings.Repeat("=", 50), sym, strings.Repeat("=", 50))
+		writeMetricsLog(reportFile, banner)
+
+		days, summaries := runUnifiedParallel(sym, reportFile)
+		totalDays += days
+		allSummaries = append(allSummaries, summaries...)
+	}
+
+	writeMetricsLog(reportFile, fmt.Sprintf(
+		"\nUnified Study Complete in %s\nTotal Days: %d\n",
+		time.Since(start), totalDays,
+	))
+	fmt.Printf("\n[done] Unified report saved to Unified_Report_Norm.txt\n")
+
+	printWinners(allSummaries)
+}
+
+func runUnifiedParallel(sym string, report *os.File) (int, []SignalSummary) {
+	const numBuckets = 10
+	const stride = 1000
+
+	metricNames := MetricFeatureNames()
+	numSignals := len(metricNames)
+	if numSignals == 0 {
+		return 0, nil
+	}
+
+	var tasks []ofiTask
+	for t := range discoverTasks(sym) {
+		tasks = append(tasks, t)
+	}
+	numDays := len(tasks)
+	if numDays == 0 {
+		return 0, nil
+	}
+
+	results := make([]*TaskResult, numDays)
+	taskChan := make(chan int, numDays)
+	var wg sync.WaitGroup
+
+	var globalMu sync.Mutex
+	globalMathDists := InitMathDists()
+	globalFeatureCorr := InitFeatureCorr()
+
+	for i := 0; i < numDays; i++ {
+		taskChan <- i
+	}
+	close(taskChan)
+
+	// Worker Pool
+	for i := 0; i < CPUThreads; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			ws := &MathWorkspace{}
+			cols := DayColumnPool.Get().(*DayColumns)
+			sb := SignalBufferPool.Get().(*SignalBuffers)
+
+			// Thread-Local Accumulators
+			localDists := InitMathDists()
+			localFC := InitFeatureCorr()
+
+			var gncBuf []byte
+			var retBuf []float64
+			var prefixBuf []float64
+			decayBufs := make([][]float64, len(DecayHorizons))
+			latRetBufs := make([][]float64, len(LatencyHorizonsMs))
+
+			defer func() {
+				DayColumnPool.Put(cols)
+				SignalBufferPool.Put(sb)
+
+				// Reduce to Global
+				globalMu.Lock()
+				for k := range globalMathDists {
+					dG := &globalMathDists[k]
+					dL := &localDists[k]
+					dG.Count += dL.Count
+					dG.Sum += dL.Sum
+					dG.SumSq += dL.SumSq
+					dG.Outliers += dL.Outliers // Accumulate outlier counts
+					if dL.Min < dG.Min {
+						dG.Min = dL.Min
+					}
+					if dL.Max > dG.Max {
+						dG.Max = dL.Max
+					}
+				}
+				globalFeatureCorr.Count += localFC.Count
+				for k, v := range localFC.SumProd {
+					globalFeatureCorr.SumProd[k] += v
+				}
+				for k, v := range localFC.SumX {
+					globalFeatureCorr.SumX[k] += v
+				}
+				for k, v := range localFC.SumSqX {
+					globalFeatureCorr.SumSqX[k] += v
+				}
+				globalMu.Unlock()
+			}()
+
+			for taskIdx := range taskChan {
+				t := tasks[taskIdx]
+				res := processDayTask(sym, t, taskIdx, numSignals, numBuckets, stride,
+					cols, sb, ws, &gncBuf, &retBuf, &prefixBuf, decayBufs, latRetBufs,
+					localDists, &localFC)
+
+				if res != nil {
+					results[taskIdx] = res
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Aggregation
+	globalMoments := make([]Moments, numSignals)
+	dailyICs := make([][]float64, numSignals)
+	bucketAggs := make([][]BucketAgg, numSignals)
+	for i := 0; i < numSignals; i++ {
+		bucketAggs[i] = make([]BucketAgg, numBuckets)
+	}
+
+	decayICs := make([][][]float64, numSignals)
+	for i := 0; i < numSignals; i++ {
+		decayICs[i] = make([][]float64, len(DecayHorizons))
+	}
+	latencyICs := make([][][]float64, numSignals)
+	for i := 0; i < numSignals; i++ {
+		latencyICs[i] = make([][]float64, len(LatencyHorizonsMs))
+	}
+
+	globalFeeMoments := make([]FeeMoments, numSignals)
+	cumNetPL := make([]float64, numSignals)
+	peakNetPL := make([]float64, numSignals)
+	maxDDNet := make([]float64, numSignals)
+	grossMaxDD := make([]float64, numSignals)
+
+	validDays := 0
+	for _, res := range results {
+		if res == nil {
+			continue
+		}
+		validDays++
+
+		for sIdx, stats := range res.Stats {
+			globalMoments[sIdx].Add(stats.Moments)
+
+			if !math.IsNaN(stats.IC) {
+				dailyICs[sIdx] = append(dailyICs[sIdx], stats.IC)
+			}
+
+			for b, br := range stats.BucketResults {
+				if b < len(bucketAggs[sIdx]) {
+					bucketAggs[sIdx][b].Add(br)
+				}
+			}
+
+			for h, val := range stats.DecayICs {
+				if !math.IsNaN(val) {
+					decayICs[sIdx][h] = append(decayICs[sIdx][h], val)
+				}
+			}
+			for l, val := range stats.LatencyICs {
+				if !math.IsNaN(val) {
+					latencyICs[sIdx][l] = append(latencyICs[sIdx][l], val)
+				}
+			}
+
+			globalFeeMoments[sIdx].Add(stats.NetPnLMoments)
+
+			startLevel := cumNetPL[sIdx]
+
+			dayHighAbs := startLevel + stats.NetPL_Max
+			if dayHighAbs > peakNetPL[sIdx] {
+				peakNetPL[sIdx] = dayHighAbs
+			}
+
+			dayLowAbs := startLevel + stats.NetPL_Min
+			currentDD := peakNetPL[sIdx] - dayLowAbs
+			if currentDD > maxDDNet[sIdx] {
+				maxDDNet[sIdx] = currentDD
+			}
+
+			if stats.MaxDD_Intra > maxDDNet[sIdx] {
+				maxDDNet[sIdx] = stats.MaxDD_Intra
+			}
+
+			cumNetPL[sIdx] += stats.NetPL_Total
+
+			if stats.GrossDD_Max > grossMaxDD[sIdx] {
+				grossMaxDD[sIdx] = stats.GrossDD_Max
+			}
+		}
+	}
+
+	writeMetricsLog(report, fmt.Sprintf("      Processed %d days (Parallel).\n", validDays))
+
+	summaries := make([]SignalSummary, 0, numSignals)
+
+	for sIdx, sigName := range metricNames {
+		stats := FinalizeMetrics(globalMoments[sIdx], dailyICs[sIdx])
+		title := fmt.Sprintf("%s | %s", sym, sigName)
+		mono := ComputeBucketMonotonicity(bucketAggs[sIdx])
+
+		fm := globalFeeMoments[sIdx]
+		var netMean, netStd, netSharpe float64
+		if fm.Count > 0 {
+			netMean = fm.SumNet / fm.Count
+			variance := (fm.SumSqNet / fm.Count) - netMean*netMean
+			if variance < 0 {
+				variance = 0
+			}
+			netStd = math.Sqrt(variance)
+			if variance > 1e-18 && netStd > 0 {
+				netSharpe = netMean / netStd
+			}
+		}
+
+		extras := PnLExtras{
+			NetMean:    netMean,
+			NetStd:     netStd,
+			NetSharpe:  netSharpe,
+			MaxDDGross: grossMaxDD[sIdx],
+			MaxDDNet:   maxDDNet[sIdx],
+		}
+
+		printMetricsReport(title, report, stats, bucketAggs[sIdx],
+			DecayHorizons, decayICs[sIdx], LatencyHorizonsMs, latencyICs[sIdx], mono, extras)
+
+		summaries = append(summaries, SignalSummary{
+			Symbol:       sym,
+			SignalName:   sigName,
+			ICPearson:    stats.ICPearson,
+			ICTStat:      stats.IC_TStat,
+			SharpeGross:  stats.Sharpe,
+			NetSharpe:    extras.NetSharpe,
+			BreakevenBps: stats.BreakevenBps,
+			Monotonicity: mono,
+			MaxDDNet:     extras.MaxDDNet,
+		})
+	}
+
+	printMathReport(report, globalMathDists)
+	corrMat, _ := BuildFeatureCorrMatrix(globalFeatureCorr)
+	printFeatureCorrMatrix(report, corrMat)
+
+	return validDays, summaries
+}
+
+func processDayTask(sym string, t ofiTask, taskIdx, numSignals, numBuckets, stride int,
+	cols *DayColumns, sb *SignalBuffers, ws *MathWorkspace,
+	gncBuf *[]byte, retBuf *[]float64, prefixBuf *[]float64, decayBufs, latRetBufs [][]float64,
+	dists []MathDist, fc *FeatureCorr) *TaskResult {
+
+	gncBlob, ok := loadRawGNC(sym, t, gncBuf)
+	if !ok || len(gncBlob) == 0 {
+		return nil
+	}
+
+	cols.Reset()
+	rowCount, ok := inflateGNCToColumns(gncBlob, cols)
+	if !ok || rowCount < 2 {
+		return nil
+	}
+	n := rowCount
+	nRet := n - 1
+
+	prices := cols.Prices
+	times := cols.Times
+
+	if cap(*retBuf) < nRet {
+		*retBuf = make([]float64, nRet)
+	}
+	rets := (*retBuf)[:nRet]
+
+	// Returns Calculation (Log Returns)
+	for i := 0; i < nRet; i++ {
+		p0 := prices[i]
+		p1 := prices[i+1]
+		if p0 > 0 && p1 > 0 {
+			rets[i] = math.Log(p1 / p0)
+		} else {
+			rets[i] = 0
+		}
+	}
+
+	// Prefix Sums for Decay Horizons
+	if cap(*prefixBuf) < nRet+1 {
+		*prefixBuf = make([]float64, nRet+1)
+	}
+	prefix := (*prefixBuf)[:nRet+1]
+	prefix[0] = 0
+	for i := 0; i < nRet; i++ {
+		prefix[i+1] = prefix[i] + rets[i]
+	}
+
+	for hIdx, h := range DecayHorizons {
+		if h <= 0 || h > nRet {
+			decayBufs[hIdx] = decayBufs[hIdx][:0]
+			continue
+		}
+		length := n - h
+		if cap(decayBufs[hIdx]) < length {
+			decayBufs[hIdx] = make([]float64, length)
+		}
+		hr := decayBufs[hIdx][:length]
+		for i := 0; i < length; i++ {
+			hr[i] = prefix[i+h] - prefix[i]
+		}
+	}
+
+	// Latency Return Vectors
+	for lIdx, latMs := range LatencyHorizonsMs {
+		if latMs <= 0 {
+			latRetBufs[lIdx] = latRetBufs[lIdx][:0]
+			continue
+		}
+		if cap(latRetBufs[lIdx]) < nRet {
+			latRetBufs[lIdx] = make([]float64, nRet)
+		}
+		rLat := latRetBufs[lIdx][:nRet]
+
+		j := 0
+		for i := 0; i < nRet; i++ {
+			if j < i+1 {
+				j = i + 1
+			}
+			ti := times[i]
+			for j < n && times[j]-ti < latMs {
+				j++
+			}
+			if j >= n {
+				for k := i; k < nRet; k++ {
+					rLat[k] = 0
+				}
+				break
+			}
+			p0 := prices[i]
+			p1 := prices[j]
+			if p0 > 0 && p1 > 0 {
+				rLat[i] = math.Log(p1 / p0)
+			} else {
+				rLat[i] = 0
+			}
+		}
+	}
+
+	// Ensure Signal Buffers
+	for s := 0; s < numSignals; s++ {
+		if cap(sb.Data[s]) < n {
+			sb.Data[s] = make([]float64, n)
+		}
+		sb.Data[s] = sb.Data[s][:n]
+	}
+
+	// Compute Primitive Signals
+	ComputeFeaturesAndSignals(cols, dists, sb.Data[:], fc, ws)
+
+	dayStats := make([]DailyStats, numSignals)
+
+	for sIdx := 0; sIdx < numSignals; sIdx++ {
+		sigs := sb.Data[sIdx][:nRet]
+
+		// --- ONLINE Z-SCORE NORMALIZATION ---
+		// Calculates Mean/StdDev for the day and normalizes the signal in-place.
+		// Also applies soft clamping to +/- 5 sigma to prevent PnL explosion.
+		var sum, sumSq float64
+		for _, v := range sigs {
+			sum += v
+			sumSq += v * v
+		}
+		mean := sum / float64(len(sigs))
+		variance := (sumSq / float64(len(sigs))) - mean*mean
+
+		var stdInv float64
+		if variance > 1e-18 {
+			stdInv = 1.0 / math.Sqrt(variance)
+		}
+
+		for i := range sigs {
+			// Normalize
+			v := (sigs[i] - mean) * stdInv
+
+			// Soft Clamp (Tanh) to +/- 5 Sigma
+			// This prevents outliers from dominating the Pearson IC and PnL.
+			// 5.0 * Tanh(v / 5.0) approaches +/- 5 smoothly.
+			const limit = 5.0
+			if v > limit {
+				v = limit * math.Tanh(v/limit)
+			} else if v < -limit {
+				v = limit * math.Tanh(v/limit)
+			}
+			sigs[i] = v
+		}
+		// ------------------------------------
+
+		dayStats[sIdx].Moments = CalcMomentsVectors(sigs, rets)
+		dayStats[sIdx].IC = calcIC(sigs, rets)
+
+		dayStats[sIdx].BucketResults = ComputeQuantilesStrided(sigs, rets, numBuckets, stride, ws)
+
+		dayStats[sIdx].DecayICs = make([]float64, len(DecayHorizons))
+		for hIdx, hr := range decayBufs {
+			if len(hr) == 0 {
+				dayStats[sIdx].DecayICs[hIdx] = math.NaN()
+				continue
+			}
+			length := len(hr)
+			if length > len(sigs) {
+				length = len(sigs)
+			}
+			dayStats[sIdx].DecayICs[hIdx] = calcIC(sigs[:length], hr[:length])
+		}
+
+		dayStats[sIdx].LatencyICs = make([]float64, len(LatencyHorizonsMs))
+		for lIdx, rLat := range latRetBufs {
+			if len(rLat) == 0 {
+				dayStats[sIdx].LatencyICs[lIdx] = math.NaN()
+				continue
+			}
+			length := len(rLat)
+			if length > len(sigs) {
+				length = len(sigs)
+			}
+			dayStats[sIdx].LatencyICs[lIdx] = calcIC(sigs[:length], rLat[:length])
+		}
+
+		var ddState DrawdownState
+		var fm FeeMoments
+		updatePnLPath(sigs, rets, &ddState, &fm)
+
+		dayStats[sIdx].NetPL_Total = ddState.CumNet
+		dayStats[sIdx].NetPL_Max = ddState.MaxNet
+		dayStats[sIdx].NetPL_Min = ddState.MinNet
+		dayStats[sIdx].MaxDD_Intra = ddState.MaxDDNet
+		dayStats[sIdx].GrossDD_Max = ddState.MaxDDGross
+		dayStats[sIdx].NetPnLMoments = fm
+	}
+
+	return &TaskResult{
+		DayIndex: taskIdx,
+		Stats:    dayStats,
+	}
+}
+
+func calcIC(sigs, rets []float64) float64 {
+	n := len(sigs)
+	if n == 0 || len(rets) != n {
+		return math.NaN()
+	}
+	var sumS, sumR, sumSS, sumRR, sumSR float64
+	for i := 0; i < n; i++ {
+		s, r := sigs[i], rets[i]
+		sumS += s
+		sumR += r
+		sumSS += s * s
+		sumRR += r * r
+		sumSR += s * r
+	}
+	N := float64(n)
+	num := N*sumSR - sumS*sumR
+	denX := N*sumSS - sumS*sumS
+	denY := N*sumRR - sumR*sumR
+	if denX <= 0 || denY <= 0 {
+		return math.NaN()
+	}
+	return num / math.Sqrt(denX*denY)
+}
+
+func printWinners(all []SignalSummary) {
+	if len(all) == 0 {
+		fmt.Println("\n[winners] No summaries.")
+		return
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].NetSharpe > all[j].NetSharpe })
+	fmt.Println("\n=== GLOBAL TOP STRATEGIES (by NetSharpe) ===")
+	for i := 0; i < len(all) && i < 5; i++ {
+		s := all[i]
+		fmt.Printf("  #%d  %-8s | %-12s | NetSharpe=%.3f | MaxDD=%.4f\n",
+			i+1, s.Symbol, s.SignalName, s.NetSharpe, s.MaxDDNet)
+	}
+}
+
+func printMetricsReport(name string, f *os.File, ms MetricStats, bucketAggs []BucketAgg, decayHorizons []int, decayICs [][]float64, latencyHorizonsMs []int64, latencyICs [][]float64, bucketMono float64, extras PnLExtras) {
+	writeMetricsLog(f, fmt.Sprintf("\n[metrics] Aggregated signal/return statistics for %s:\n", name))
+	writeMetricsLog(f, fmt.Sprintf("  Count             : %d\n", ms.Count))
+	writeMetricsLog(f, fmt.Sprintf("  IC (Pearson)      : %.4f\n", ms.ICPearson))
+	writeMetricsLog(f, fmt.Sprintf("  IC t-stat         : %.2f\n", ms.IC_TStat))
+	writeMetricsLog(f, fmt.Sprintf("  Sharpe (PnL)      : %.3f\n", ms.Sharpe))
+	writeMetricsLog(f, fmt.Sprintf("  Hit Rate          : %.3f\n", ms.HitRate))
+	writeMetricsLog(f, fmt.Sprintf("  Breakeven Bps     : %.3f\n", ms.BreakevenBps))
+	writeMetricsLog(f, fmt.Sprintf("  AutoCorr(sig)     : %.3f\n", ms.AutoCorr))
+	writeMetricsLog(f, fmt.Sprintf("  AutoCorr(|s|)     : %.3f\n", ms.AutoCorrAbs))
+	writeMetricsLog(f, fmt.Sprintf("  AvgSegLen         : %.3f\n", ms.AvgSegLen))
+	writeMetricsLog(f, fmt.Sprintf("  MaxSegLen         : %.0f\n", ms.MaxSegLen))
+	writeMetricsLog(f, fmt.Sprintf("  Monotonicity      : %.3f (Spearman over buckets)\n", bucketMono))
+	writeMetricsLog(f, "\n  Signal Distribution:\n")
+	writeMetricsLog(f, fmt.Sprintf("    mean(s) = %.6f, std(s) = %.6f\n", ms.MeanSig, ms.StdSig))
+	writeMetricsLog(f, "\n  Return Distribution:\n")
+	writeMetricsLog(f, fmt.Sprintf("    mean(r) = %.8f, std(r) = %.8f\n", ms.MeanRet, ms.StdRet))
+	writeMetricsLog(f, "\n  PnL Distribution (s * r):\n")
+	writeMetricsLog(f, fmt.Sprintf("    mean(pnl) = %.8f, std(pnl) = %.8f, Sharpe_gross = %.3f\n", ms.MeanPnL, ms.StdPnL, ms.Sharpe))
+	writeMetricsLog(f, "\n  Net PnL (with taker fees):\n")
+	writeMetricsLog(f, fmt.Sprintf("    Fee(bps)        = %.3f\n", FeeBps))
+	writeMetricsLog(f, fmt.Sprintf("    mean(pnl_net) = %.8f, std(pnl_net) = %.8f, Sharpe_net = %.3f\n", extras.NetMean, extras.NetStd, extras.NetSharpe))
+	writeMetricsLog(f, fmt.Sprintf("    MaxDD(gross)  = %.8f, MaxDD(net)   = %.8f\n", extras.MaxDDGross, extras.MaxDDNet))
+	writeMetricsLog(f, "\n[buckets] Signal quantiles vs average return (bps):\n")
+	writeMetricsLog(f, "  Bucket |       AvgSig      |  AvgRet(bps) |    Count\n")
+	writeMetricsLog(f, "  -------+-----------+--------------+--------\n")
+	for i, agg := range bucketAggs {
+		br := agg.Finalize(i + 1)
+		writeMetricsLog(f, fmt.Sprintf("  %6d | %9.6f | %12.3f | %7d\n", br.ID, br.AvgSig, br.AvgRetBps, br.Count))
+	}
+	if len(decayHorizons) > 0 && len(decayICs) == len(decayHorizons) {
+		writeMetricsLog(f, "\n  Multi-horizon IC (tick-based; mean, t-stat):\n")
+		for i, h := range decayHorizons {
+			mean, t := summarizeICs(decayICs[i])
+			writeMetricsLog(f, fmt.Sprintf("    h=%d ticks: IC=%.4f, t=%.2f (n=%d)\n", h, mean, t, len(decayICs[i])))
+		}
+	}
+	if len(latencyHorizonsMs) > 0 && len(latencyICs) == len(latencyHorizonsMs) {
+		writeMetricsLog(f, "\n  Latency IC (time-based; mean, t-stat):\n")
+		for i, lat := range latencyHorizonsMs {
+			mean, t := summarizeICs(latencyICs[i])
+			writeMetricsLog(f, fmt.Sprintf("    L=%dms:   IC=%.4f, t=%.2f (n=%d)\n", lat, mean, t, len(latencyICs[i])))
+		}
+	}
+	writeMetricsLog(f, "\n")
+}
+
+func printFeatureCorrMatrix(f *os.File, corr [][]float64) {
+	if len(corr) == 0 {
+		writeMetricsLog(f, "\n[feat] Feature correlation matrix: insufficient data.\n")
+		return
+	}
+	writeMetricsLog(f, "\n[feat] Feature cross-correlation matrix (Pearson):\n\n")
+	writeMetricsLog(f, fmt.Sprintf("%-12s", ""))
+	for j := 0; j < len(FeatureNames); j++ {
+		writeMetricsLog(f, fmt.Sprintf(" %10.10s", FeatureNames[j]))
+	}
+	writeMetricsLog(f, "\n")
+	for i := 0; i < len(FeatureNames); i++ {
+		writeMetricsLog(f, fmt.Sprintf("%-12.12s", FeatureNames[i]))
+		if i >= len(corr) || corr[i] == nil {
+			writeMetricsLog(f, "\n")
+			continue
+		}
+		row := corr[i]
+		for j := 0; j < len(FeatureNames); j++ {
+			val := math.NaN()
+			if j < len(row) {
+				val = row[j]
+			}
+			if math.IsNaN(val) {
+				writeMetricsLog(f, fmt.Sprintf(" %10s", "NaN"))
+			} else {
+				writeMetricsLog(f, fmt.Sprintf(" %10.3f", val))
+			}
+		}
+		writeMetricsLog(f, "\n")
+	}
+}
+
+func printMathReport(f *os.File, dists []MathDist) {
+	writeMetricsLog(f, "\n[math] Feature distributions:\n\n")
+	writeMetricsLog(f, "   Feature        |        Min       |        Max       |        Mean      |       StdDev     |  Outlier%\n")
+	writeMetricsLog(f, "  ---------------+---------------+---------------+---------------+------------------+-----------\n")
+
+	for i, d := range dists {
+		name := "Unknown"
+		if i < len(FeatureNames) {
+			name = FeatureNames[i]
+		}
+		if d.Count == 0 {
+			writeMetricsLog(f, fmt.Sprintf("  %-14s | %13s | %13s | %13s | %13s | %8s\n", name, "-", "-", "-", "-", "-"))
+			continue
+		}
+		mean := d.Sum / d.Count
+		variance := (d.SumSq / d.Count) - mean*mean
+		std := 0.0
+		if variance > 0 {
+			std = math.Sqrt(variance)
+		}
+		outlierPct := (float64(d.Outliers) / d.Count) * 100.0
+		writeMetricsLog(f, fmt.Sprintf("  %-14s | %13.4f | %13.4f | %13.4f | %13.4f | %8.2f%%\n",
+			name, d.Min, d.Max, mean, std, outlierPct))
+	}
+	writeMetricsLog(f, "\n")
+}
+```
+
+// --- End File: test.go ---
+

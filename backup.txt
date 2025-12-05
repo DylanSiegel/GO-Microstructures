@@ -1,0 +1,2326 @@
+PS Z:\Benchmarks> go run . build
+go1.25.5 X:jsonv2,greenteagc | Env: windows/amd64 | Threads: 24 | RAM Limit: 24GB | GOGC: 200 | GOAMD64: v4
+>>> Building BTCUSDT (Enhanced Atoms v2)
+>>> Building ETHUSDT (Enhanced Atoms v2)
+[build] Complete in 1m14.4630585s
+
+[sys] Execution Time: 1m14.4630585s | Mem: 4171 MB
+PS Z:\Benchmarks> go run . study
+go1.25.5 X:jsonv2,greenteagc | Env: windows/amd64 | Threads: 24 | RAM Limit: 24GB | GOGC: 200 | GOAMD64: v4
+
+>>> STUDY: BTCUSDT <<<
+Variants: 1 | Days: 2163
+[========================================] 100.0% (2163/2163) | 96.0 days/s  
+== Horizon 0.500s [IS: 1461 | OOS: 702] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0653   88.05   0.0795   90.58   0.098   0.084  3.11      1103.0   0.30       0.36
+Atoms_v1_f02_TCI        0.1406   76.40   0.3204   113.30  0.357   0.000  3.11      1103.0   0.38       0.77
+Atoms_v1_f03_Whale      -0.0176  -58.28  -0.0162  -46.06  0.049   0.048  1.02      8.0      -0.53      -0.50
+Atoms_v1_f04_Lumpiness  0.0110   56.47   0.0066   45.08   0.018   0.018  3.11      1103.0   0.60       0.85
+Atoms_v1_f05_Sweep      0.0974   89.27   0.1531   93.49   0.110   0.071  3.11      1103.0   0.30       0.37
+Atoms_v1_f06_Fragility  0.0816   48.84   0.2445   83.92   0.190   0.225  3.11      1103.0   0.19       0.41
+Atoms_v1_f07_Magnet     -0.0004  0.44    0.0028   1.02    0.965   0.965  33155.20  65467.0  0.04       0.17
+Atoms_v1_f08_Velocity   0.0204   68.77   0.0201   53.40   0.008   0.013  1.64      128.0    0.38       0.40
+Atoms_v1_f09_Accel      -0.0033  0.22    -0.0012  -2.56   -0.497  0.523  1.42      12.0     -0.01      -0.00
+Atoms_v1_f10_Gap        0.0168   53.20   0.0173   50.47   0.047   0.337  1.64      128.0    0.06       0.03
+Atoms_v1_f11_DGT        0.0582   78.73   0.0746   81.47   0.073   0.064  2.33      1101.0   0.29       0.38
+Atoms_v1_f12_Absorb     0.0295   91.29   0.0296   67.97   0.059   0.054  1.63      103.0    0.27       0.25
+Atoms_v1_f13_Fractal    -0.0005  2.54    0.0043   2.66    0.103   0.103  9.00      6431.0   -0.00      0.03
+
+-- Monotonicity Check (IS) Horizon 0.500s --
+FEATURE                MONO   B1(Sell) B2   B3   B4   B5(Buy)
+Atoms_v1_f01_OFI       0.995  -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f02_TCI       0.953  -0.2     -0.2 0.0  0.2  0.3
+Atoms_v1_f03_Whale     -0.657 0.0      0.0  0.0  -0.0 -0.0
+Atoms_v1_f04_Lumpiness 0.995  -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f05_Sweep     0.997  -0.3     -0.2 0.0  0.2  0.3
+Atoms_v1_f06_Fragility 0.951  -0.2     -0.2 0.0  0.2  0.2
+Atoms_v1_f07_Magnet    -0.792 0.0      0.0  0.0  -0.0 0.0
+Atoms_v1_f08_Velocity  0.927  -0.2     -0.0 0.0  0.0  0.2
+Atoms_v1_f09_Accel     -0.910 0.0      0.0  0.0  -0.0 -0.0
+Atoms_v1_f10_Gap       0.922  -0.1     -0.1 0.0  0.1  0.1
+Atoms_v1_f11_DGT       0.986  -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f12_Absorb    0.869  -0.0     0.0  0.0  -0.0 0.0
+Atoms_v1_f13_Fractal   0.475  0.0      0.0  0.0  0.0  0.0
+
+== Horizon 1.000s [IS: 1461 | OOS: 702] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0604   84.21   0.0707   79.60   0.098   0.084  3.11      1103.0   0.35       0.38
+Atoms_v1_f02_TCI        0.1233   73.58   0.2942   101.70  0.357   0.000  3.11      1103.0   0.41       0.83
+Atoms_v1_f03_Whale      -0.0158  -54.40  -0.0147  -44.45  0.049   0.048  1.02      8.0      -0.60      -0.53
+Atoms_v1_f04_Lumpiness  0.0106   54.02   0.0061   39.49   0.018   0.018  3.11      1103.0   0.72       0.92
+Atoms_v1_f05_Sweep      0.0860   86.12   0.1417   88.66   0.110   0.071  3.11      1103.0   0.33       0.41
+Atoms_v1_f06_Fragility  0.0717   46.54   0.2295   80.69   0.190   0.225  3.11      1103.0   0.20       0.45
+Atoms_v1_f07_Magnet     -0.0010  0.18    0.0029   1.23    0.965   0.965  33155.20  65467.0  0.06       0.17
+Atoms_v1_f08_Velocity   0.0186   66.87   0.0181   50.05   0.008   0.013  1.64      128.0    0.44       0.42
+Atoms_v1_f09_Accel      -0.0023  3.48    -0.0010  -1.40   -0.497  0.523  1.42      12.0     -0.01      -0.00
+Atoms_v1_f10_Gap        0.0157   58.96   0.0175   52.64   0.047   0.337  1.64      128.0    0.07       0.04
+Atoms_v1_f11_DGT        0.0542   77.09   0.0659   73.39   0.073   0.064  2.33      1101.0   0.34       0.40
+Atoms_v1_f12_Absorb     0.0267   80.61   0.0270   60.86   0.059   0.054  1.63      103.0    0.30       0.27
+Atoms_v1_f13_Fractal    0.0018   3.38    0.0006   2.11    0.103   0.103  9.00      6431.0   0.02       0.01
+
+-- Monotonicity Check (IS) Horizon 1.000s --
+FEATURE                MONO   B1(Sell) B2   B3   B4   B5(Buy)
+Atoms_v1_f01_OFI       0.994  -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f02_TCI       0.950  -0.3     -0.3 0.0  0.3  0.3
+Atoms_v1_f03_Whale     -0.573 0.0      0.0  0.0  0.0  0.0
+Atoms_v1_f04_Lumpiness 0.994  -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.0  0.2  0.4
+Atoms_v1_f06_Fragility 0.956  -0.3     -0.2 0.0  0.2  0.3
+Atoms_v1_f07_Magnet    -0.855 0.0      0.0  0.0  0.0  0.0
+Atoms_v1_f08_Velocity  0.931  -0.3     -0.0 0.0  0.0  0.3
+Atoms_v1_f09_Accel     -0.837 0.0      0.0  0.0  -0.0 0.0
+Atoms_v1_f10_Gap       0.913  -0.1     -0.1 0.0  0.2  0.1
+Atoms_v1_f11_DGT       0.983  -0.3     -0.2 -0.0 0.3  0.3
+Atoms_v1_f12_Absorb    0.865  -0.0     0.0  0.0  0.0  0.1
+Atoms_v1_f13_Fractal   0.899  0.0      0.0  0.0  0.0  0.0
+
+== Horizon 2.000s [IS: 1461 | OOS: 702] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0517   74.59   0.0632   74.60   0.098   0.084  3.11      1103.0   0.40       0.40
+Atoms_v1_f02_TCI        0.1039   68.22   0.2679   93.60   0.357   0.000  3.11      1103.0   0.47       0.90
+Atoms_v1_f03_Whale      -0.0131  -51.46  -0.0132  -39.67  0.049   0.048  1.02      8.0      -0.66      -0.57
+Atoms_v1_f04_Lumpiness  0.0091   48.70   0.0053   38.76   0.018   0.018  3.11      1103.0   0.82       0.96
+Atoms_v1_f05_Sweep      0.0717   77.85   0.1300   83.87   0.110   0.071  3.11      1103.0   0.36       0.45
+Atoms_v1_f06_Fragility  0.0605   44.06   0.2112   77.08   0.190   0.225  3.11      1103.0   0.23       0.50
+Atoms_v1_f07_Magnet     -0.0018  0.01    0.0017   0.82    0.965   0.965  33155.20  65467.0  0.09       0.01
+Atoms_v1_f08_Velocity   0.0155   59.90   0.0165   47.77   0.008   0.013  1.64      128.0    0.49       0.45
+Atoms_v1_f09_Accel      -0.0015  5.32    -0.0007  1.07    -0.497  0.523  1.42      12.0     -0.01      -0.00
+Atoms_v1_f10_Gap        0.0135   62.53   0.0174   54.94   0.047   0.337  1.64      128.0    0.08       0.05
+Atoms_v1_f11_DGT        0.0467   69.31   0.0588   68.75   0.073   0.064  2.33      1101.0   0.39       0.43
+Atoms_v1_f12_Absorb     0.0223   70.38   0.0244   56.43   0.059   0.054  1.63      103.0    0.34       0.29
+Atoms_v1_f13_Fractal    0.0048   3.67    -0.0045  1.36    0.103   0.103  9.00      6431.0   0.07       -0.04
+
+-- Monotonicity Check (IS) Horizon 2.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.992  -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f02_TCI       0.948  -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Whale     -0.092 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f04_Lumpiness 0.992  -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.0 0.3 0.4
+Atoms_v1_f06_Fragility 0.961  -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f07_Magnet    -0.843 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f08_Velocity  0.928  -0.3     -0.0 0.0 0.0 0.3
+Atoms_v1_f09_Accel     -0.820 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f10_Gap       0.915  -0.1     -0.2 0.0 0.2 0.1
+Atoms_v1_f11_DGT       0.980  -0.4     -0.3 0.0 0.3 0.4
+Atoms_v1_f12_Absorb    0.793  -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f13_Fractal   0.930  0.0      0.0  0.0 0.0 0.0
+
+== Horizon 5.000s [IS: 1461 | OOS: 702] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0347   58.82   0.0481   60.62   0.098   0.084  3.11      1103.0   0.41       0.41
+Atoms_v1_f02_TCI        0.0687   55.22   0.2110   74.21   0.357   0.000  3.11      1103.0   0.47       0.96
+Atoms_v1_f03_Whale      -0.0096  -43.07  -0.0104  -34.28  0.049   0.048  1.02      8.0      -0.74      -0.60
+Atoms_v1_f04_Lumpiness  0.0059   39.85   0.0043   33.73   0.018   0.018  3.11      1103.0   0.81       1.04
+Atoms_v1_f05_Sweep      0.0481   61.75   0.1029   69.75   0.110   0.071  3.11      1103.0   0.37       0.48
+Atoms_v1_f06_Fragility  0.0407   38.39   0.1700   66.78   0.190   0.225  3.11      1103.0   0.23       0.54
+Atoms_v1_f07_Magnet     -0.0020  0.20    -0.0000  0.59    0.965   0.965  33155.20  65467.0  0.10       -0.08
+Atoms_v1_f08_Velocity   0.0101   47.71   0.0132   41.94   0.008   0.013  1.64      128.0    0.48       0.49
+Atoms_v1_f09_Accel      -0.0009  6.21    -0.0005  1.07    -0.497  0.523  1.42      12.0     -0.01      -0.00
+Atoms_v1_f10_Gap        0.0105   57.56   0.0160   48.22   0.047   0.337  1.64      128.0    0.09       0.06
+Atoms_v1_f11_DGT        0.0306   54.52   0.0442   56.49   0.073   0.064  2.33      1101.0   0.39       0.43
+Atoms_v1_f12_Absorb     0.0164   57.31   0.0196   47.55   0.059   0.054  1.63      103.0    0.38       0.31
+Atoms_v1_f13_Fractal    0.0060   2.27    -0.0006  1.09    0.103   0.103  9.00      6431.0   0.12       -0.01
+
+-- Monotonicity Check (IS) Horizon 5.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI       0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f02_TCI       0.952  -0.3     -0.3 0.0 0.3  0.3
+Atoms_v1_f03_Whale     0.257  -0.0     0.0  0.0 0.0  0.0
+Atoms_v1_f04_Lumpiness 0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.0 0.3  0.4
+Atoms_v1_f06_Fragility 0.958  -0.3     -0.3 0.0 0.3  0.3
+Atoms_v1_f07_Magnet    -0.698 0.0      0.0  0.0 -0.0 0.0
+Atoms_v1_f08_Velocity  0.935  -0.3     -0.0 0.1 0.0  0.3
+Atoms_v1_f09_Accel     -0.847 0.0      0.0  0.0 0.0  0.0
+Atoms_v1_f10_Gap       0.914  -0.1     -0.2 0.1 0.2  0.2
+Atoms_v1_f11_DGT       0.978  -0.3     -0.3 0.0 0.3  0.4
+Atoms_v1_f12_Absorb    0.784  -0.1     0.0  0.0 0.0  0.1
+Atoms_v1_f13_Fractal   0.786  0.0      0.0  0.0 0.0  0.0
+
+== Horizon 10.000s [IS: 1461 | OOS: 702] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0250   48.14   0.0375   52.54   0.098   0.084  3.11      1103.0   0.40       0.41
+Atoms_v1_f02_TCI        0.0488   45.17   0.1696   63.07   0.357   0.000  3.11      1103.0   0.45       0.98
+Atoms_v1_f03_Whale      -0.0076  -40.16  -0.0085  -30.70  0.049   0.048  1.02      8.0      -0.79      -0.62
+Atoms_v1_f04_Lumpiness  0.0043   34.58   0.0032   30.67   0.018   0.018  3.11      1103.0   0.80       0.98
+Atoms_v1_f05_Sweep      0.0340   50.68   0.0830   61.45   0.110   0.071  3.11      1103.0   0.35       0.49
+Atoms_v1_f06_Fragility  0.0289   33.92   0.1394   59.92   0.190   0.225  3.11      1103.0   0.23       0.56
+Atoms_v1_f07_Magnet     -0.0009  0.08    0.0016   1.53    0.965   0.965  33155.20  65467.0  0.54       0.02
+Atoms_v1_f08_Velocity   0.0071   39.59   0.0106   37.55   0.008   0.013  1.64      128.0    0.46       0.50
+Atoms_v1_f09_Accel      -0.0007  6.82    -0.0004  1.22    -0.497  0.523  1.42      12.0     -0.01      -0.00
+Atoms_v1_f10_Gap        0.0087   43.21   0.0141   37.48   0.047   0.337  1.64      128.0    0.11       0.07
+Atoms_v1_f11_DGT        0.0214   43.57   0.0339   48.20   0.073   0.064  2.33      1101.0   0.37       0.42
+Atoms_v1_f12_Absorb     0.0130   49.60   0.0161   42.93   0.059   0.054  1.63      103.0    0.40       0.32
+Atoms_v1_f13_Fractal    0.0085   1.84    -0.0010  0.10    0.103   0.103  9.00      6431.0   0.24       -0.02
+
+-- Monotonicity Check (IS) Horizon 10.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.989  -0.3     -0.2 0.0 0.3 0.4
+Atoms_v1_f02_TCI       0.946  -0.3     -0.2 0.1 0.3 0.3
+Atoms_v1_f03_Whale     0.260  -0.0     0.1  0.1 0.0 0.0
+Atoms_v1_f04_Lumpiness 0.989  -0.3     -0.2 0.0 0.3 0.4
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.1 0.0 0.3 0.4
+Atoms_v1_f06_Fragility 0.956  -0.2     -0.2 0.1 0.3 0.3
+Atoms_v1_f07_Magnet    -0.688 0.1      0.1  0.0 0.0 0.0
+Atoms_v1_f08_Velocity  0.932  -0.3     -0.0 0.1 0.1 0.3
+Atoms_v1_f09_Accel     -0.545 0.1      0.0  0.0 0.0 0.0
+Atoms_v1_f10_Gap       0.896  -0.1     -0.2 0.1 0.2 0.2
+Atoms_v1_f11_DGT       0.979  -0.3     -0.2 0.0 0.3 0.4
+Atoms_v1_f12_Absorb    0.697  -0.1     0.1  0.1 0.0 0.1
+Atoms_v1_f13_Fractal   0.725  0.0      0.1  0.0 0.0 0.1
+
+
+>>> STUDY: ETHUSDT <<<
+Variants: 1 | Days: 2103
+[========================================] 100.0% (2103/2103) | 128.3 days/s  
+== Horizon 0.500s [IS: 1432 | OOS: 671] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0636   65.92   0.0840   71.65   0.156   0.143  3.44      689.0    0.36       0.43
+Atoms_v1_f02_TCI        0.1434   63.69   0.3220   118.08  0.418   0.000  3.44      689.0    0.49       1.00
+Atoms_v1_f03_Whale      -0.0383  -52.86  -0.0286  -57.46  0.090   0.087  1.10      34.0     -0.56      -0.37
+Atoms_v1_f04_Lumpiness  0.0104   35.47   0.0086   29.82   0.039   0.040  3.44      689.0    0.61       0.80
+Atoms_v1_f05_Sweep      0.1133   80.30   0.1658   88.60   0.144   0.062  3.44      689.0    0.38       0.46
+Atoms_v1_f06_Fragility  0.0362   38.35   0.1580   59.85   0.134   0.248  3.44      689.0    0.13       0.38
+Atoms_v1_f07_Magnet     -0.0015  0.33    -0.0021  1.04    0.999   0.999  33002.94  65525.0  1.81       -1.52
+Atoms_v1_f08_Velocity   0.0191   56.05   0.0225   51.43   0.007   0.010  1.82      144.0    0.38       0.47
+Atoms_v1_f09_Accel      -0.0022  3.26    0.0000   8.78    -0.482  0.531  1.48      18.0     -0.01      0.00
+Atoms_v1_f10_Gap        0.0200   55.56   0.0269   57.63   0.091   0.370  1.82      144.0    0.10       0.06
+Atoms_v1_f11_DGT        0.0469   56.81   0.0788   67.48   0.132   0.117  2.37      689.0    0.28       0.45
+Atoms_v1_f12_Absorb     0.0456   61.12   0.0316   56.71   0.088   0.086  1.69      128.0    0.50       0.32
+Atoms_v1_f13_Fractal    -0.0021  -3.07   -0.0027  0.22    0.079   0.079  7.89      6180.0   -0.01      -0.02
+
+-- Monotonicity Check (IS) Horizon 0.500s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f02_TCI       0.947  -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Whale     -0.867 0.1      0.0  0.0 0.0 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f05_Sweep     1.000  -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f06_Fragility 0.908  -0.2     -0.3 0.0 0.3 0.2
+Atoms_v1_f07_Magnet    -0.675 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f08_Velocity  0.945  -0.4     -0.0 0.0 0.1 0.4
+Atoms_v1_f09_Accel     -0.349 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f10_Gap       0.893  -0.2     -0.2 0.0 0.3 0.2
+Atoms_v1_f11_DGT       0.995  -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f12_Absorb    0.888  -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f13_Fractal   -0.370 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 1.000s [IS: 1432 | OOS: 671] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0601   68.84   0.0721   64.15   0.156   0.143  3.44      689.0    0.42       0.44
+Atoms_v1_f02_TCI        0.1262   62.87   0.2876   107.12  0.418   0.000  3.44      689.0    0.55       1.07
+Atoms_v1_f03_Whale      -0.0352  -70.46  -0.0255  -53.69  0.090   0.087  1.10      34.0     -0.65      -0.39
+Atoms_v1_f04_Lumpiness  0.0100   45.80   0.0075   28.15   0.039   0.040  3.44      689.0    0.73       0.84
+Atoms_v1_f05_Sweep      0.0995   81.30   0.1482   83.56   0.144   0.062  3.44      689.0    0.42       0.49
+Atoms_v1_f06_Fragility  0.0324   37.30   0.1435   61.00   0.134   0.248  3.44      689.0    0.14       0.41
+Atoms_v1_f07_Magnet     -0.0016  1.04    -0.0010  1.88    0.999   0.999  33002.94  65525.0  2.03       -1.21
+Atoms_v1_f08_Velocity   0.0175   55.00   0.0198   48.63   0.007   0.010  1.82      144.0    0.44       0.50
+Atoms_v1_f09_Accel      -0.0008  11.95   0.0001   8.48    -0.482  0.531  1.48      18.0     -0.00      0.00
+Atoms_v1_f10_Gap        0.0203   59.22   0.0255   57.67   0.091   0.370  1.82      144.0    0.12       0.07
+Atoms_v1_f11_DGT        0.0450   56.81   0.0670   59.91   0.132   0.117  2.37      689.0    0.34       0.46
+Atoms_v1_f12_Absorb     0.0419   79.62   0.0281   53.41   0.088   0.086  1.69      128.0    0.58       0.34
+Atoms_v1_f13_Fractal    -0.0002  -2.39   -0.0010  0.04    0.079   0.079  7.89      6180.0   0.01       -0.01
+
+-- Monotonicity Check (IS) Horizon 1.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f02_TCI       0.945  -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Whale     -0.852 0.1      0.0  0.0 0.0 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f05_Sweep     1.000  -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f06_Fragility 0.910  -0.2     -0.3 0.0 0.3 0.3
+Atoms_v1_f07_Magnet    -0.235 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f08_Velocity  0.948  -0.4     -0.0 0.0 0.1 0.5
+Atoms_v1_f09_Accel     -0.155 0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f10_Gap       0.885  -0.2     -0.3 0.0 0.3 0.2
+Atoms_v1_f11_DGT       0.995  -0.4     -0.2 0.0 0.3 0.4
+Atoms_v1_f12_Absorb    0.889  -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f13_Fractal   -0.536 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 2.000s [IS: 1432 | OOS: 671] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0534   66.41   0.0597   56.65   0.156   0.143  3.44      689.0    0.50       0.46
+Atoms_v1_f02_TCI        0.1060   61.14   0.2445   96.00   0.418   0.000  3.44      689.0    0.61       1.13
+Atoms_v1_f03_Whale      -0.0297  -64.34  -0.0216  -50.44  0.090   0.087  1.10      34.0     -0.73      -0.42
+Atoms_v1_f04_Lumpiness  0.0090   44.13   0.0063   26.65   0.039   0.040  3.44      689.0    0.88       0.87
+Atoms_v1_f05_Sweep      0.0830   78.42   0.1268   77.50   0.144   0.062  3.44      689.0    0.47       0.52
+Atoms_v1_f06_Fragility  0.0274   36.28   0.1234   60.82   0.134   0.248  3.44      689.0    0.16       0.43
+Atoms_v1_f07_Magnet     -0.0024  1.11    -0.0027  1.56    0.999   0.999  33002.94  65525.0  1.58       -2.48
+Atoms_v1_f08_Velocity   0.0153   52.92   0.0161   43.00   0.007   0.010  1.82      144.0    0.52       0.50
+Atoms_v1_f09_Accel      -0.0000  14.42   0.0001   8.73    -0.482  0.531  1.48      18.0     -0.00      0.00
+Atoms_v1_f10_Gap        0.0179   59.56   0.0231   56.37   0.091   0.370  1.82      144.0    0.15       0.08
+Atoms_v1_f11_DGT        0.0412   56.24   0.0552   51.27   0.132   0.117  2.37      689.0    0.41       0.47
+Atoms_v1_f12_Absorb     0.0353   72.11   0.0238   50.35   0.088   0.086  1.69      128.0    0.65       0.36
+Atoms_v1_f13_Fractal    0.0038   -2.48   0.0006   0.56    0.079   0.079  7.89      6180.0   0.07       0.00
+
+-- Monotonicity Check (IS) Horizon 2.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f02_TCI       0.945  -0.3     -0.3 0.0 0.4 0.4
+Atoms_v1_f03_Whale     -0.764 0.0      0.0  0.0 0.0 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f05_Sweep     1.000  -0.5     -0.2 0.0 0.3 0.5
+Atoms_v1_f06_Fragility 0.912  -0.3     -0.3 0.0 0.4 0.3
+Atoms_v1_f07_Magnet    0.557  0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f08_Velocity  0.948  -0.5     -0.1 0.0 0.1 0.5
+Atoms_v1_f09_Accel     0.065  0.0      0.0  0.0 0.0 0.0
+Atoms_v1_f10_Gap       0.880  -0.2     -0.3 0.0 0.4 0.2
+Atoms_v1_f11_DGT       0.994  -0.4     -0.3 0.0 0.3 0.5
+Atoms_v1_f12_Absorb    0.877  -0.2     0.0  0.0 0.0 0.2
+Atoms_v1_f13_Fractal   -0.591 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 5.000s [IS: 1432 | OOS: 671] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0358   54.20   0.0424   48.26   0.156   0.143  3.44      689.0    0.50       0.44
+Atoms_v1_f02_TCI        0.0696   51.18   0.1812   73.01   0.418   0.000  3.44      689.0    0.60       1.13
+Atoms_v1_f03_Whale      -0.0218  -55.24  -0.0166  -45.27  0.090   0.087  1.10      34.0     -0.80      -0.43
+Atoms_v1_f04_Lumpiness  0.0058   35.87   0.0047   24.81   0.039   0.040  3.44      689.0    0.85       0.88
+Atoms_v1_f05_Sweep      0.0556   63.45   0.0945   64.36   0.144   0.062  3.44      689.0    0.47       0.52
+Atoms_v1_f06_Fragility  0.0185   32.84   0.0935   56.81   0.134   0.248  3.44      689.0    0.16   
+    0.44
+Atoms_v1_f07_Magnet     -0.0031  1.68    -0.0048  1.88    0.999   0.999  33002.94  65525.0  3.64       -3.01
+Atoms_v1_f08_Velocity   0.0098   42.86   0.0119   33.07   0.007   0.010  1.82      144.0    0.49       0.50
+Atoms_v1_f09_Accel      0.0001   15.49   0.0001   6.26    -0.482  0.531  1.48      18.0     0.00       0.00
+Atoms_v1_f10_Gap        0.0134   58.09   0.0188   47.91   0.091   0.370  1.82      144.0    0.16       0.09
+Atoms_v1_f11_DGT        0.0265   44.68   0.0385   41.30   0.132   0.117  2.37      689.0    0.39       0.44
+Atoms_v1_f12_Absorb     0.0256   62.78   0.0183   44.09   0.088   0.086  1.69      128.0    0.70       0.37
+Atoms_v1_f13_Fractal    0.0131   -1.58   0.0053   0.46    0.079   0.079  7.89      6180.0   0.33       0.08
+
+-- Monotonicity Check (IS) Horizon 5.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f02_TCI       0.941  -0.3     -0.3 0.0 0.4 0.4
+Atoms_v1_f03_Whale     -0.671 0.1      0.1  0.1 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f05_Sweep     1.000  -0.5     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.914  -0.3     -0.3 0.1 0.4 0.3
+Atoms_v1_f07_Magnet    0.451  0.1      0.0  0.0 0.0 0.1
+Atoms_v1_f08_Velocity  0.932  -0.5     -0.0 0.1 0.1 0.5
+Atoms_v1_f09_Accel     -0.031 0.1      0.1  0.0 0.0 0.1
+Atoms_v1_f10_Gap       0.901  -0.2     -0.2 0.1 0.4 0.3
+Atoms_v1_f11_DGT       0.994  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f12_Absorb    0.832  -0.2     0.1  0.1 0.1 0.2
+Atoms_v1_f13_Fractal   0.030  0.0      0.0  0.1 0.1 0.0
+
+== Horizon 10.000s [IS: 1432 | OOS: 671] ==
+FEATURE                 IS_IC    IS_T    OOS_IC   OOS_T   AC1     |AC1|  AVG_SEG   MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI        0.0265   45.29   0.0306   39.21   0.156   0.143  3.44      689.0    0.49       0.41
+Atoms_v1_f02_TCI        0.0515   44.37   0.1353   60.74   0.418   0.000  3.44      689.0    0.59       1.10
+Atoms_v1_f03_Whale      -0.0171  -49.22  -0.0124  -42.60  0.090   0.087  1.10      34.0     -0.84      -0.42
+Atoms_v1_f04_Lumpiness  0.0041   28.28   0.0036   22.47   0.039   0.040  3.44      689.0    0.80       0.87
+Atoms_v1_f05_Sweep      0.0400   54.26   0.0704   52.59   0.144   0.062  3.44      689.0    0.45       0.51
+Atoms_v1_f06_Fragility  0.0139   29.61   0.0713   50.25   0.134   0.248  3.44      689.0    0.16       0.44
+Atoms_v1_f07_Magnet     -0.0024  1.70    -0.0044  1.70    0.999   0.999  33002.94  65525.0  8.66       -2.11
+Atoms_v1_f08_Velocity   0.0066   35.61   0.0091   27.17   0.007   0.010  1.82      144.0    0.44       0.50
+Atoms_v1_f09_Accel      0.0001   15.70   0.0001   10.29   -0.482  0.531  1.48      18.0     0.00       0.00
+Atoms_v1_f10_Gap        0.0114   50.58   0.0146   37.18   0.091   0.370  1.82      144.0    0.18       0.09
+Atoms_v1_f11_DGT        0.0189   36.36   0.0275   34.30   0.132   0.117  2.37      689.0    0.37       0.41
+Atoms_v1_f12_Absorb     0.0201   55.86   0.0136   40.13   0.088   0.086  1.69      128.0    0.73       0.36
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+Atoms_v1_f11_DGT        0.0189   36.36   0.0275   34.30   0.132   0.117  2.37      689.0    0.37       0.41
+Atoms_v1_f12_Absorb     0.0201   55.86   0.0136   40.13   0.088   0.086  1.69      128.0    0.73       0.36
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+    0.41
+Atoms_v1_f12_Absorb     0.0201   55.86   0.0136   40.13   0.088   0.086  1.69      128.0    0.73       0.36
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+Atoms_v1_f12_Absorb     0.0201   55.86   0.0136   40.13   0.088   0.086  1.69      128.0    0.73       0.36
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+    0.36
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+Atoms_v1_f13_Fractal    0.0173   -0.31   0.0047   1.46    0.079   0.079  7.89      6180.0   0.57       0.09
+
+    0.09
+
+-- Monotonicity Check (IS) Horizon 10.000s --
+
+-- Monotonicity Check (IS) Horizon 10.000s --
+-- Monotonicity Check (IS) Horizon 10.000s --
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+Atoms_v1_f07_Magnet    0.139  0.1      0.0  0.0 0.0 0.2
+Atoms_v1_f08_Velocity  0.934  -0.4     0.0  0.1 0.1 0.6
+Atoms_v1_f09_Accel     -0.075 0.1      0.1  0.1 0.1 0.1
+Atoms_v1_f10_Gap       0.898  -0.2     -0.2 0.1 0.4 0.3
+Atoms_v1_f11_DGT       0.994  -0.3     -0.2 0.1 0.3 0.5
+Atoms_v1_f12_Absorb    0.789  -0.1     0.1  0.1 0.1 0.2
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+Atoms_v1_f07_Magnet    0.139  0.1      0.0  0.0 0.0 0.2
+Atoms_v1_f08_Velocity  0.934  -0.4     0.0  0.1 0.1 0.6
+Atoms_v1_f09_Accel     -0.075 0.1      0.1  0.1 0.1 0.1
+Atoms_v1_f10_Gap       0.898  -0.2     -0.2 0.1 0.4 0.3
+Atoms_v1_f11_DGT       0.994  -0.3     -0.2 0.1 0.3 0.5
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+Atoms_v1_f07_Magnet    0.139  0.1      0.0  0.0 0.0 0.2
+Atoms_v1_f08_Velocity  0.934  -0.4     0.0  0.1 0.1 0.6
+Atoms_v1_f09_Accel     -0.075 0.1      0.1  0.1 0.1 0.1
+Atoms_v1_f10_Gap       0.898  -0.2     -0.2 0.1 0.4 0.3
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+Atoms_v1_f07_Magnet    0.139  0.1      0.0  0.0 0.0 0.2
+Atoms_v1_f08_Velocity  0.934  -0.4     0.0  0.1 0.1 0.6
+Atoms_v1_f09_Accel     -0.075 0.1      0.1  0.1 0.1 0.1
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+FEATURE                MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI       0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f02_TCI       0.931  -0.3     -0.3 0.1 0.4 0.4
+Atoms_v1_f03_Whale     -0.682 0.1      0.1  0.2 0.1 -0.0
+Atoms_v1_f04_Lumpiness 0.999  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f05_Sweep     0.998  -0.4     -0.2 0.1 0.3 0.6
+Atoms_v1_f06_Fragility 0.918  -0.2     -0.3 0.1 0.4 0.4
+Atoms_v1_f07_Magnet    0.139  0.1      0.0  0.0 0.0 0.2
+Atoms_v1_f08_Velocity  0.934  -0.4     0.0  0.1 0.1 0.6
+Atoms_v1_f09_Accel     -0.075 0.1      0.1  0.1 0.1 0.1
+Atoms_v1_f10_Gap       0.898  -0.2     -0.2 0.1 0.4 0.3
+Atoms_v1_f11_DGT       0.994  -0.3     -0.2 0.1 0.3 0.5
+Atoms_v1_f12_Absorb    0.789  -0.1     0.1  0.1 0.1 0.2
+Atoms_v1_f13_Fractal   0.452  0.1      0.1  0.1 0.1 0.1
+
+[study] ALL COMPLETE in 39.0214561s
+
+[sys] Execution Time: 39.0214561s | Mem: 5809 MB
+PS Z:\Benchmarks>
+package main
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"iter"
+	"math"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"time"
+)
+
+// --- Atomic Configuration ---
+
+type AtomConfig struct {
+	WhaleThreshold float64 // Volume threshold for iceberg detection
+}
+
+var DefaultAtoms = AtomConfig{
+	WhaleThreshold: 5.0, // Lowered slightly to capture mid-sized absorption
+}
+
+const (
+	EPS = 1e-9
+)
+
+type ofiTask struct {
+	Y, M, D        int
+	Offset, Length int64
+}
+
+// --- Execution Logic ---
+
+func runBuild() {
+	start := time.Now()
+
+	// Pipeline: Symbols -> Build
+	found := false
+	for sym := range discoverSymbols() {
+		found = true
+		buildForSymbol(sym)
+	}
+
+	if !found {
+		fmt.Printf("[build] no symbols discovered under %q\n", BaseDir)
+	}
+	fmt.Printf("[build] Complete in %s\n", time.Since(start))
+}
+
+func discoverSymbols() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		entries, err := os.ReadDir(BaseDir)
+		if err != nil {
+			fmt.Printf("[build] ReadDir(%s): %v\n", BaseDir, err)
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if name == "features" || name == "common" || len(name) == 0 || name[0] == '.' {
+				continue
+			}
+			if !yield(name) {
+				return
+			}
+		}
+	}
+}
+
+func buildForSymbol(sym string) {
+	fmt.Printf(">>> Building %s (Enhanced Atoms v2)\n", sym)
+	featRoot := filepath.Join(BaseDir, "features", sym)
+
+	tasksCh := make(chan ofiTask, 1024)
+
+	outDir := filepath.Join(featRoot, "Atoms_v1")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		fmt.Printf("[build] MkdirAll(%s): %v\n", outDir, err)
+		return
+	}
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < CPUThreads; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var binBuf []byte
+			var gncBuf []byte
+			for t := range tasksCh {
+				processAtomDay(sym, t, outDir, DefaultAtoms, &binBuf, &gncBuf)
+			}
+		}()
+	}
+
+	count := 0
+	for t := range discoverTasks(sym) {
+		tasksCh <- t
+		count++
+	}
+	close(tasksCh)
+
+	if count == 0 {
+		fmt.Printf("[build] no tasks for symbol %s\n", sym)
+	}
+
+	wg.Wait()
+}
+
+func discoverTasks(sym string) iter.Seq[ofiTask] {
+	return func(yield func(ofiTask) bool) {
+		root := filepath.Join(BaseDir, sym)
+		years, err := os.ReadDir(root)
+		if err != nil {
+			return
+		}
+
+		for _, yDir := range years {
+			if !yDir.IsDir() {
+				continue
+			}
+			y, err := strconv.Atoi(yDir.Name())
+			if err != nil || y <= 0 {
+				continue
+			}
+			yearPath := filepath.Join(root, yDir.Name())
+			months, err := os.ReadDir(yearPath)
+			if err != nil {
+				continue
+			}
+			for _, mDir := range months {
+				if !mDir.IsDir() {
+					continue
+				}
+				m, err := strconv.Atoi(mDir.Name())
+				if err != nil || m < 1 || m > 12 {
+					continue
+				}
+
+				idxPath := filepath.Join(yearPath, mDir.Name(), "index.quantdev")
+				f, err := os.Open(idxPath)
+				if err != nil {
+					continue
+				}
+
+				var hdr [16]byte
+				if _, err := io.ReadFull(f, hdr[:]); err != nil {
+					f.Close()
+					continue
+				}
+				if string(hdr[0:4]) != IdxMagic {
+					f.Close()
+					continue
+				}
+				count := binary.LittleEndian.Uint64(hdr[8:])
+				var row [26]byte
+				for i := uint64(0); i < count; i++ {
+					if _, err := io.ReadFull(f, row[:]); err != nil {
+						break
+					}
+					d := int(binary.LittleEndian.Uint16(row[0:]))
+					offset := int64(binary.LittleEndian.Uint64(row[2:]))
+					length := int64(binary.LittleEndian.Uint64(row[10:]))
+					if length > 0 {
+						task := ofiTask{
+							Y: y, M: m, D: d,
+							Offset: offset, Length: length,
+						}
+						if !yield(task) {
+							f.Close()
+							return
+						}
+					}
+				}
+				f.Close()
+			}
+		}
+	}
+}
+
+func processAtomDay(sym string, t ofiTask, outDir string, cfg AtomConfig, binBuf, gncBuf *[]byte) {
+	dateStr := fmt.Sprintf("%04d%02d%02d", t.Y, t.M, t.D)
+	outPath := filepath.Join(outDir, dateStr+".bin")
+
+	gncBlob, ok := loadRawGNC(sym, t, gncBuf)
+	if !ok {
+		return
+	}
+
+	colsAny := DayColumnPool.Get()
+	cols := colsAny.(*DayColumns)
+	cols.Reset()
+	defer DayColumnPool.Put(cols)
+
+	rowCount, ok := inflateGNCToColumns(gncBlob, cols)
+	if !ok || rowCount < 2 {
+		return
+	}
+
+	reqSize := rowCount * FeatRowBytes
+	if cap(*binBuf) < reqSize {
+		*binBuf = make([]byte, reqSize)
+	}
+	*binBuf = (*binBuf)[:reqSize]
+
+	times := cols.Times
+	qtys := cols.Qtys
+	prices := cols.Prices
+	sides := cols.Sides
+	matches := cols.Matches
+
+	writeVal := func(rowIdx, atomIdx int, val float64) {
+		off := rowIdx*FeatRowBytes + atomIdx*4
+		binary.LittleEndian.PutUint32((*binBuf)[off:], math.Float32bits(float32(val)))
+	}
+
+	prevP := prices[0]
+	// State for stateful features
+	prevFlow := 0.0
+
+	for i := 0; i < rowCount; i++ {
+		q := qtys[i]
+		s := float64(sides[i])
+		p := prices[i]
+
+		// Net Flow for this step
+		currFlow := q * s
+
+		m := 1.0
+		if len(matches) > i {
+			m = float64(matches[i])
+		}
+
+		dt := 0.0
+		if i > 0 {
+			dt = float64(times[i] - times[i-1])
+		}
+		dp := 0.0
+		if i > 0 {
+			dp = p - prevP
+		}
+
+		// 1. OFI (Order Flow Imbalance) - Standard
+		writeVal(i, 0, currFlow)
+
+		// 2. TCI (Trade Continuation) - Standard
+		writeVal(i, 1, s)
+
+		// 3. Whale v2: Iceberg/Absorption Detector
+		// Logic: If Volume is High but Price Change is approx Zero,
+		// the PASSIVE side absorbed the aggressor.
+		// If Aggressor = Buy (1) and dp=0, Seller absorbed it -> Bearish (-).
+		val3 := 0.0
+		if q > cfg.WhaleThreshold && math.Abs(dp) < EPS {
+			// Invert sign of aggressor to show who "won" (the passive wall)
+			val3 = -1.0 * s * q
+		}
+		writeVal(i, 2, val3)
+
+		// 4. Lumpiness (Sign Flip)
+		// Old: -(q^2)*s (Inverse correlation)
+		// New: (q^2)*s (Positive correlation: Buy lumps = Bullish)
+		writeVal(i, 3, (q*q)*s)
+
+		// 5. Sweep - Standard
+		writeVal(i, 4, m*s)
+
+		// 6. Fragility - Standard
+		val6 := 0.0
+		if q > EPS {
+			val6 = (m / q) * s
+		}
+		writeVal(i, 5, val6)
+
+		// 7. Magnet v2: Round Number Proximity ($100)
+		// Logic: Strongest (1.0) at X00.00, decays as we move away.
+		// BTC typically respects 100/500/1000 levels.
+		mod := math.Mod(p, 100.0)
+		if mod > 50.0 {
+			mod = 100.0 - mod
+		}
+		// Dist is between 0 and 50.
+		// Feature = 1 / (1 + dist)
+		writeVal(i, 6, 1.0/(1.0+mod))
+
+		// 8. Velocity - Standard
+		vel := 0.0
+		if dt > EPS {
+			vel = q / dt
+		}
+		writeVal(i, 7, vel*s)
+
+		// 9. Accel v2: Flow Acceleration
+		// Old: Derivative of Price Velocity (Noisy)
+		// New: Change in Net Flow (Force)
+		accel := currFlow - prevFlow
+		writeVal(i, 8, accel)
+
+		// 10. Gap - Standard
+		writeVal(i, 9, dt*s)
+
+		// 11. DGT - Standard
+		signDp := 0.0
+		if dp > 0 {
+			signDp = 1.0
+		} else if dp < 0 {
+			signDp = -1.0
+		}
+		val11 := 0.0
+		if s == signDp {
+			val11 = q * s
+		}
+		writeVal(i, 10, val11)
+
+		// 12. Absorb - Standard
+		val12 := 0.0
+		if s != signDp {
+			val12 = q * s
+		}
+		writeVal(i, 11, val12)
+
+		// 13. Fractal - Standard
+		val13 := 0.0
+		if q > EPS {
+			val13 = math.Abs(dp) / q
+		}
+		writeVal(i, 12, val13)
+
+		prevP = p
+		prevFlow = currFlow
+	}
+
+	if err := os.WriteFile(outPath, *binBuf, 0644); err != nil {
+		fmt.Printf("[build] WriteFile(%s): %v\n", outPath, err)
+	}
+}
+
+func loadRawGNC(sym string, t ofiTask, buf *[]byte) ([]byte, bool) {
+	path := filepath.Join(BaseDir,
+		sym,
+		fmt.Sprintf("%04d", t.Y),
+		fmt.Sprintf("%02d", t.M),
+		"data.quantdev",
+	)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+
+	if _, err := f.Seek(t.Offset, io.SeekStart); err != nil {
+		return nil, false
+	}
+
+	if t.Length <= 0 || t.Length > 1<<31-1 {
+		return nil, false
+	}
+	need := int(t.Length)
+	if cap(*buf) < need {
+		*buf = make([]byte, need)
+	}
+	b := (*buf)[:need]
+
+	if _, err := io.ReadFull(f, b); err != nil {
+		return nil, false
+	}
+	if len(b) < 4 || string(b[0:4]) != GNCMagic {
+		return nil, false
+	}
+	return b, true
+}
+PS Z:\Benchmarks> go run . study
+go1.25.5 X:jsonv2,greenteagc | Env: windows/amd64 | Threads: 24 | RAM Limit: 24GB | GOGC: 200 | GOAMD64: v4
+
+>>> STUDY: BTCUSDT <<<
+Variants: 1 | Days: 2163
+[========================================] 100.0% (2163/2163) | 89.1 days/s  
+== Horizon 0.500s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T   AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0653  88.05  0.0795  90.58   0.098  0.084  3.11     1103.0   0.30       0.36
+Atoms_v1_f02_TCI            0.1406  76.40  0.3204  113.30  0.357  0.000  3.11     1103.0   0.38       0.77
+Atoms_v1_f03_Sweep          0.0974  89.27  0.1531  93.49   0.110  0.071  3.11     1103.0   0.30       0.37
+Atoms_v1_f04_Fragility      0.0816  48.84  0.2445  83.92   0.190  0.225  3.11     1103.0   0.19       0.41
+Atoms_v1_f05_Lumpiness      0.0110  56.47  0.0066  45.08   0.018  0.018  3.11     1103.0   0.60       0.85
+Atoms_v1_f06_DGT            0.0582  78.73  0.0746  81.47   0.073  0.064  2.33     1101.0   0.29       0.38
+Atoms_v1_f07_Velocity       0.0204  68.77  0.0201  53.40   0.008  0.013  1.64     128.0    0.38       0.40
+Atoms_v1_f08_Gap            0.0168  53.20  0.0173  50.47   0.047  0.337  1.64     128.0    0.06       0.03
+Atoms_v1_f09_Absorb         0.0295  91.29  0.0296  67.97   0.059  0.054  1.63     103.0    0.27       0.25
+Atoms_v1_f10_TCI_EMA_8s     0.0353  29.28  0.0759  27.31   0.989  0.980  50.66    19190.0  1.18       2.16
+Atoms_v1_f11_TCI_EMA_30s    0.0108  9.75   0.0319  10.91   0.998  0.996  135.19   50864.0  1.02       2.66
+Atoms_v1_f12_OFI_EMA_15s    0.0444  33.15  0.1208  40.37   0.991  0.990  139.90   22444.0  5.60       15.70
+Atoms_v1_f13_TCI_CUSUM_60s  0.0041  4.28   0.0180  5.91    0.999  0.999  227.79   59232.0  0.73       2.82
+
+-- Monotonicity Check (IS) Horizon 0.500s --
+FEATURE                    MONO  B1(Sell) B2   B3   B4   B5(Buy)
+Atoms_v1_f01_OFI           0.995 -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f02_TCI           0.953 -0.2     -0.2 0.0  0.2  0.3
+Atoms_v1_f03_Sweep         0.997 -0.3     -0.2 0.0  0.2  0.3
+Atoms_v1_f04_Fragility     0.951 -0.2     -0.2 0.0  0.2  0.2
+Atoms_v1_f05_Lumpiness     0.995 -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f06_DGT           0.986 -0.3     -0.2 -0.0 0.2  0.3
+Atoms_v1_f07_Velocity      0.927 -0.2     -0.0 0.0  0.0  0.2
+Atoms_v1_f08_Gap           0.922 -0.1     -0.1 0.0  0.1  0.1
+Atoms_v1_f09_Absorb        0.869 -0.0     0.0  0.0  -0.0 0.0
+Atoms_v1_f10_TCI_EMA_8s    0.985 -0.1     -0.0 0.0  0.0  0.1
+Atoms_v1_f11_TCI_EMA_30s   0.887 -0.0     0.0  0.0  0.0  0.0
+Atoms_v1_f12_OFI_EMA_15s   0.991 -0.1     -0.0 0.0  0.0  0.1
+Atoms_v1_f13_TCI_CUSUM_60s 0.941 -0.0     0.0  0.0  0.0  0.0
+
+== Horizon 1.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T   AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0604  84.21  0.0707  79.60   0.098  0.084  3.11     1103.0   0.35       0.38
+Atoms_v1_f02_TCI            0.1233  73.58  0.2942  101.70  0.357  0.000  3.11     1103.0   0.41       0.83
+Atoms_v1_f03_Sweep          0.0860  86.12  0.1417  88.66   0.110  0.071  3.11     1103.0   0.33       0.41
+Atoms_v1_f04_Fragility      0.0717  46.54  0.2295  80.69   0.190  0.225  3.11     1103.0   0.20       0.45
+Atoms_v1_f05_Lumpiness      0.0106  54.02  0.0061  39.49   0.018  0.018  3.11     1103.0   0.72       0.92
+Atoms_v1_f06_DGT            0.0542  77.09  0.0659  73.39   0.073  0.064  2.33     1101.0   0.34       0.40
+Atoms_v1_f07_Velocity       0.0186  66.87  0.0181  50.05   0.008  0.013  1.64     128.0    0.44       0.42
+Atoms_v1_f08_Gap            0.0157  58.96  0.0175  52.64   0.047  0.337  1.64     128.0    0.07       0.04
+Atoms_v1_f09_Absorb         0.0267  80.61  0.0270  60.86   0.059  0.054  1.63     103.0    0.30       0.27
+Atoms_v1_f10_TCI_EMA_8s     0.0371  24.90  0.0730  24.87   0.989  0.980  50.66    19190.0  1.55       2.44
+Atoms_v1_f11_TCI_EMA_30s    0.0132  8.24   0.0294  9.23    0.998  0.996  135.19   50864.0  1.56       2.87
+Atoms_v1_f12_OFI_EMA_15s    0.0435  27.63  0.1113  35.24   0.991  0.990  139.90   22444.0  6.84       16.93
+Atoms_v1_f13_TCI_CUSUM_60s  0.0063  3.41   0.0167  4.58    0.999  0.999  227.79   59232.0  1.40       3.07
+
+-- Monotonicity Check (IS) Horizon 1.000s --
+FEATURE                    MONO  B1(Sell) B2   B3   B4  B5(Buy)
+Atoms_v1_f01_OFI           0.994 -0.3     -0.2 -0.0 0.2 0.3
+Atoms_v1_f02_TCI           0.950 -0.3     -0.3 0.0  0.3 0.3
+Atoms_v1_f03_Sweep         0.998 -0.4     -0.2 0.0  0.2 0.4
+Atoms_v1_f04_Fragility     0.956 -0.3     -0.2 0.0  0.2 0.3
+Atoms_v1_f05_Lumpiness     0.994 -0.3     -0.2 -0.0 0.2 0.3
+Atoms_v1_f06_DGT           0.983 -0.3     -0.2 -0.0 0.3 0.3
+Atoms_v1_f07_Velocity      0.931 -0.3     -0.0 0.0  0.0 0.3
+Atoms_v1_f08_Gap           0.913 -0.1     -0.1 0.0  0.2 0.1
+Atoms_v1_f09_Absorb        0.865 -0.0     0.0  0.0  0.0 0.1
+Atoms_v1_f10_TCI_EMA_8s    0.982 -0.1     -0.0 0.0  0.0 0.1
+Atoms_v1_f11_TCI_EMA_30s   0.840 -0.0     0.0  -0.0 0.0 0.0
+Atoms_v1_f12_OFI_EMA_15s   0.990 -0.1     -0.0 0.0  0.1 0.1
+Atoms_v1_f13_TCI_CUSUM_60s 0.921 -0.0     0.0  0.0  0.0 0.0
+
+== Horizon 2.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0517  74.59  0.0632  74.60  0.098  0.084  3.11     1103.0   0.40       0.40
+Atoms_v1_f02_TCI            0.1039  68.22  0.2679  93.60  0.357  0.000  3.11     1103.0   0.47       0.90
+Atoms_v1_f03_Sweep          0.0717  77.85  0.1300  83.87  0.110  0.071  3.11     1103.0   0.36       0.45
+Atoms_v1_f04_Fragility      0.0605  44.06  0.2112  77.08  0.190  0.225  3.11     1103.0   0.23       0.50
+Atoms_v1_f05_Lumpiness      0.0091  48.70  0.0053  38.76  0.018  0.018  3.11     1103.0   0.82       0.96
+Atoms_v1_f06_DGT            0.0467  69.31  0.0588  68.75  0.073  0.064  2.33     1101.0   0.39       0.43
+Atoms_v1_f07_Velocity       0.0155  59.90  0.0165  47.77  0.008  0.013  1.64     128.0    0.49       0.45
+Atoms_v1_f08_Gap            0.0135  62.53  0.0174  54.94  0.047  0.337  1.64     128.0    0.08       0.05
+Atoms_v1_f09_Absorb         0.0223  70.38  0.0244  56.43  0.059  0.054  1.63     103.0    0.34       0.29
+Atoms_v1_f10_TCI_EMA_8s     0.0359  19.43  0.0693  21.77  0.989  0.980  50.66    19190.0  2.00       2.77
+Atoms_v1_f11_TCI_EMA_30s    0.0155  6.01   0.0267  7.86   0.998  0.996  135.19   50864.0  2.46       3.14
+Atoms_v1_f12_OFI_EMA_15s    0.0393  20.94  0.1030  30.82  0.991  0.990  139.90   22444.0  8.27       18.79
+Atoms_v1_f13_TCI_CUSUM_60s  0.0096  2.13   0.0143  3.70   0.999  0.999  227.79   59232.0  2.84       3.17
+
+-- Monotonicity Check (IS) Horizon 2.000s --
+FEATURE                    MONO  B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI           0.992 -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f02_TCI           0.948 -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Sweep         0.998 -0.4     -0.2 0.0 0.3 0.4
+Atoms_v1_f04_Fragility     0.961 -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f05_Lumpiness     0.992 -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f06_DGT           0.980 -0.4     -0.3 0.0 0.3 0.4
+Atoms_v1_f07_Velocity      0.928 -0.3     -0.0 0.0 0.0 0.3
+Atoms_v1_f08_Gap           0.915 -0.1     -0.2 0.0 0.2 0.1
+Atoms_v1_f09_Absorb        0.793 -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f10_TCI_EMA_8s    0.964 -0.1     -0.0 0.0 0.0 0.1
+Atoms_v1_f11_TCI_EMA_30s   0.700 -0.0     0.0  0.0 0.0 0.0
+Atoms_v1_f12_OFI_EMA_15s   0.991 -0.1     -0.0 0.0 0.1 0.2
+Atoms_v1_f13_TCI_CUSUM_60s 0.862 -0.0     0.0  0.0 0.0 0.0
+
+== Horizon 5.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0347  58.82  0.0481  60.62  0.098  0.084  3.11     1103.0   0.41       0.41
+Atoms_v1_f02_TCI            0.0687  55.22  0.2110  74.21  0.357  0.000  3.11     1103.0   0.47       0.96
+Atoms_v1_f03_Sweep          0.0481  61.75  0.1029  69.75  0.110  0.071  3.11     1103.0   0.37       0.48
+Atoms_v1_f04_Fragility      0.0407  38.39  0.1700  66.78  0.190  0.225  3.11     1103.0   0.23       0.54
+Atoms_v1_f05_Lumpiness      0.0059  39.85  0.0043  33.73  0.018  0.018  3.11     1103.0   0.81       1.04
+Atoms_v1_f06_DGT            0.0306  54.52  0.0442  56.49  0.073  0.064  2.33     1101.0   0.39       0.43
+Atoms_v1_f07_Velocity       0.0101  47.71  0.0132  41.94  0.008  0.013  1.64     128.0    0.48       0.49
+Atoms_v1_f08_Gap            0.0105  57.56  0.0160  48.22  0.047  0.337  1.64     128.0    0.09       0.06
+Atoms_v1_f09_Absorb         0.0164  57.31  0.0196  47.55  0.059  0.054  1.63     103.0    0.38       0.31
+Atoms_v1_f10_TCI_EMA_8s     0.0270  9.56   0.0568  15.38  0.989  0.980  50.66    19190.0  2.28       3.06
+Atoms_v1_f11_TCI_EMA_30s    0.0132  1.30   0.0215  4.53   0.998  0.996  135.19   50864.0  3.16       3.40
+Atoms_v1_f12_OFI_EMA_15s    0.0271  8.94   0.0792  22.29  0.991  0.990  139.90   22444.0  8.61       19.43
+Atoms_v1_f13_TCI_CUSUM_60s  0.0094  -0.63  0.0128  1.50   0.999  0.999  227.79   59232.0  4.25       3.81
+
+-- Monotonicity Check (IS) Horizon 5.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f02_TCI           0.952  -0.3     -0.3 0.0 0.3  0.3
+Atoms_v1_f03_Sweep         0.998  -0.4     -0.2 0.0 0.3  0.4
+Atoms_v1_f04_Fragility     0.958  -0.3     -0.3 0.0 0.3  0.3
+Atoms_v1_f05_Lumpiness     0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f06_DGT           0.978  -0.3     -0.3 0.0 0.3  0.4
+Atoms_v1_f07_Velocity      0.935  -0.3     -0.0 0.1 0.0  0.3
+Atoms_v1_f08_Gap           0.914  -0.1     -0.2 0.1 0.2  0.2
+Atoms_v1_f09_Absorb        0.784  -0.1     0.0  0.0 0.0  0.1
+Atoms_v1_f10_TCI_EMA_8s    0.804  -0.1     0.0  0.1 0.0  0.1
+Atoms_v1_f11_TCI_EMA_30s   -0.148 -0.0     0.1  0.0 -0.0 0.0
+Atoms_v1_f12_OFI_EMA_15s   0.920  -0.1     -0.0 0.1 0.0  0.1
+Atoms_v1_f13_TCI_CUSUM_60s -0.694 0.0      0.0  0.0 0.0  -0.0
+
+== Horizon 10.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0250  48.14  0.0375  52.54  0.098  0.084  3.11     1103.0   0.40       0.41
+Atoms_v1_f02_TCI            0.0488  45.17  0.1696  63.07  0.357  0.000  3.11     1103.0   0.45       0.98
+Atoms_v1_f03_Sweep          0.0340  50.68  0.0830  61.45  0.110  0.071  3.11     1103.0   0.35       0.49
+Atoms_v1_f04_Fragility      0.0289  33.92  0.1394  59.92  0.190  0.225  3.11     1103.0   0.23       0.56
+Atoms_v1_f05_Lumpiness      0.0043  34.58  0.0032  30.67  0.018  0.018  3.11     1103.0   0.80       0.98
+Atoms_v1_f06_DGT            0.0214  43.57  0.0339  48.20  0.073  0.064  2.33     1101.0   0.37       0.42
+Atoms_v1_f07_Velocity       0.0071  39.59  0.0106  37.55  0.008  0.013  1.64     128.0    0.46       0.50
+Atoms_v1_f08_Gap            0.0087  43.21  0.0141  37.48  0.047  0.337  1.64     128.0    0.11       0.07
+Atoms_v1_f09_Absorb         0.0130  49.60  0.0161  42.93  0.059  0.054  1.63     103.0    0.40       0.32
+Atoms_v1_f10_TCI_EMA_8s     0.0209  4.75   0.0455  10.17  0.989  0.980  50.66    19190.0  2.40       3.12
+Atoms_v1_f11_TCI_EMA_30s    0.0129  -0.69  0.0169  1.76   0.998  0.996  135.19   50864.0  4.22       3.41
+Atoms_v1_f12_OFI_EMA_15s    0.0212  3.08   0.0615  15.46  0.991  0.990  139.90   22444.0  9.18       19.18
+Atoms_v1_f13_TCI_CUSUM_60s  0.0115  -1.72  0.0104  -0.45  0.999  0.999  227.79   59232.0  7.02       3.96
+
+-- Monotonicity Check (IS) Horizon 10.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f02_TCI           0.946  -0.3     -0.2 0.1 0.3  0.3
+Atoms_v1_f03_Sweep         0.998  -0.4     -0.1 0.0 0.3  0.4
+Atoms_v1_f04_Fragility     0.956  -0.2     -0.2 0.1 0.3  0.3
+Atoms_v1_f05_Lumpiness     0.989  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f06_DGT           0.979  -0.3     -0.2 0.0 0.3  0.4
+Atoms_v1_f07_Velocity      0.932  -0.3     -0.0 0.1 0.1  0.3
+Atoms_v1_f08_Gap           0.896  -0.1     -0.2 0.1 0.2  0.2
+Atoms_v1_f09_Absorb        0.697  -0.1     0.1  0.1 0.0  0.1
+Atoms_v1_f10_TCI_EMA_8s    0.543  -0.1     0.1  0.1 0.0  0.1
+Atoms_v1_f11_TCI_EMA_30s   -0.949 0.1      0.1  0.0 0.0  -0.0
+Atoms_v1_f12_OFI_EMA_15s   -0.297 0.1      0.0  0.1 -0.0 0.0
+Atoms_v1_f13_TCI_CUSUM_60s -0.849 0.1      0.1  0.1 0.0  -0.1
+
+== Horizon 30.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC   IS_T   OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0126  27.55  0.0219   35.68  0.098  0.084  3.11     1103.0   0.31       0.37
+Atoms_v1_f02_TCI            0.0243  27.63  0.1014   41.87  0.357  0.000  3.11     1103.0   0.35       0.91
+Atoms_v1_f03_Sweep          0.0173  31.99  0.0500   43.75  0.110  0.071  3.11     1103.0   0.28       0.46
+Atoms_v1_f04_Fragility      0.0153  23.93  0.0865   44.52  0.190  0.225  3.11     1103.0   0.19       0.55
+Atoms_v1_f05_Lumpiness      0.0023  19.78  0.0020   24.70  0.018  0.018  3.11     1103.0   0.67       0.98
+Atoms_v1_f06_DGT            0.0097  23.49  0.0194   32.14  0.073  0.064  2.33     1101.0   0.26       0.37
+Atoms_v1_f07_Velocity       0.0034  24.52  0.0064   28.31  0.008  0.013  1.64     128.0    0.34       0.47
+Atoms_v1_f08_Gap            0.0064  23.36  0.0094   19.32  0.047  0.337  1.64     128.0    0.12       0.07
+Atoms_v1_f09_Absorb         0.0086  31.23  0.0103   28.30  0.059  0.054  1.63     103.0    0.41       0.32
+Atoms_v1_f10_TCI_EMA_8s     0.0110  -2.09  0.0198   1.25   0.989  0.980  50.66    19190.0  1.98       2.13
+Atoms_v1_f11_TCI_EMA_30s    0.0046  -4.08  -0.0007  -3.58  0.998  0.996  135.19   50864.0  2.44       -0.15
+Atoms_v1_f12_OFI_EMA_15s    0.0090  -6.23  0.0305   4.30   0.991  0.990  139.90   22444.0  6.07       14.86
+Atoms_v1_f13_TCI_CUSUM_60s  0.0036  -4.07  -0.0050  -4.48  0.999  0.999  227.79   59232.0  3.66       -2.82
+
+-- Monotonicity Check (IS) Horizon 30.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.981  -0.2     -0.1 0.1 0.3  0.3
+Atoms_v1_f02_TCI           0.946  -0.2     -0.1 0.1 0.3  0.3
+Atoms_v1_f03_Sweep         0.990  -0.3     -0.0 0.1 0.2  0.4
+Atoms_v1_f04_Fragility     0.941  -0.1     -0.1 0.1 0.3  0.3
+Atoms_v1_f05_Lumpiness     0.981  -0.2     -0.1 0.1 0.3  0.3
+Atoms_v1_f06_DGT           0.974  -0.1     -0.1 0.0 0.3  0.3
+Atoms_v1_f07_Velocity      0.910  -0.2     -0.0 0.2 0.1  0.4
+Atoms_v1_f08_Gap           0.896  -0.1     -0.1 0.2 0.3  0.2
+Atoms_v1_f09_Absorb        0.715  -0.1     0.1  0.1 0.1  0.1
+Atoms_v1_f10_TCI_EMA_8s    -0.408 0.0      0.4  0.1 -0.1 0.0
+Atoms_v1_f11_TCI_EMA_30s   -0.974 0.3      0.2  0.1 -0.1 -0.2
+Atoms_v1_f12_OFI_EMA_15s   -0.970 0.5      0.2  0.1 -0.2 -0.2
+Atoms_v1_f13_TCI_CUSUM_60s -0.932 0.2      0.3  0.1 0.0  -0.2
+
+== Horizon 60.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC    IS_T    OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0073   16.05   0.0152   26.04  0.098  0.084  3.11     1103.0   0.23       0.34
+Atoms_v1_f02_TCI            0.0144   17.04   0.0697   29.17  0.357  0.000  3.11     1103.0   0.26       0.83
+Atoms_v1_f03_Sweep          0.0103   20.36   0.0345   32.14  0.110  0.071  3.11     1103.0   0.21       0.42
+Atoms_v1_f04_Fragility      0.0101   17.64   0.0618   34.72  0.190  0.225  3.11     1103.0   0.16       0.52
+Atoms_v1_f05_Lumpiness      0.0014   12.68   0.0015   20.85  0.018  0.018  3.11     1103.0   0.50       0.99
+Atoms_v1_f06_DGT            0.0049   11.84   0.0132   22.81  0.073  0.064  2.33     1101.0   0.17       0.34
+Atoms_v1_f07_Velocity       0.0020   15.58   0.0043   21.46  0.008  0.013  1.64     128.0    0.25       0.42
+Atoms_v1_f08_Gap            0.0056   15.32   0.0069   11.09  0.047  0.337  1.64     128.0    0.13       0.07
+Atoms_v1_f09_Absorb         0.0064   23.10   0.0077   20.77  0.059  0.054  1.63     103.0    0.39       0.32
+Atoms_v1_f10_TCI_EMA_8s     0.0013   -4.92   0.0074   -2.77  0.989  0.980  50.66    19190.0  0.32       1.08
+Atoms_v1_f11_TCI_EMA_30s    -0.0061  -5.37   -0.0074  -5.38  0.998  0.996  135.19   50864.0  -3.71      -2.94
+Atoms_v1_f12_OFI_EMA_15s    -0.0010  -10.04  0.0165   -1.01  0.991  0.990  139.90   22444.0  -0.78      10.74
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0055  -4.71   -0.0080  -5.20  0.999  0.999  227.79   59232.0  -6.16      -6.03
+
+-- Monotonicity Check (IS) Horizon 60.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.975  -0.1     -0.0 0.1 0.2  0.3
+Atoms_v1_f02_TCI           0.812  -0.1     -0.1 0.1 0.3  0.2
+Atoms_v1_f03_Sweep         0.979  -0.2     0.0  0.1 0.2  0.3
+Atoms_v1_f04_Fragility     0.923  -0.1     -0.1 0.1 0.2  0.2
+Atoms_v1_f05_Lumpiness     0.975  -0.1     -0.0 0.1 0.2  0.3
+Atoms_v1_f06_DGT           0.958  -0.0     -0.0 0.0 0.2  0.3
+Atoms_v1_f07_Velocity      0.918  -0.2     0.0  0.2 0.1  0.3
+Atoms_v1_f08_Gap           0.852  -0.1     -0.1 0.2 0.3  0.2
+Atoms_v1_f09_Absorb        0.942  -0.1     0.0  0.1 0.2  0.2
+Atoms_v1_f10_TCI_EMA_8s    -0.726 0.2      0.6  0.1 -0.2 -0.2
+Atoms_v1_f11_TCI_EMA_30s   -0.919 0.4      0.4  0.3 -0.2 -0.5
+Atoms_v1_f12_OFI_EMA_15s   -0.988 0.6      0.5  0.2 -0.3 -0.6
+Atoms_v1_f13_TCI_CUSUM_60s -0.941 0.4      0.4  0.2 -0.1 -0.5
+
+== Horizon 120.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC    IS_T    OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0036   4.80    0.0106   16.54  0.098  0.084  3.11     1103.0   0.15       0.32
+Atoms_v1_f02_TCI            0.0071   5.60    0.0460   18.45  0.357  0.000  3.11     1103.0   0.17       0.73
+Atoms_v1_f03_Sweep          0.0051   7.75    0.0230   21.93  0.110  0.071  3.11     1103.0   0.13       0.37
+Atoms_v1_f04_Fragility      0.0059   9.11    0.0422   26.44  0.190  0.225  3.11     1103.0   0.12       0.47
+Atoms_v1_f05_Lumpiness      0.0006   5.59    0.0013   14.98  0.018  0.018  3.11     1103.0   0.29       1.11
+Atoms_v1_f06_DGT            0.0016   1.52    0.0088   13.81  0.073  0.064  2.33     1101.0   0.07       0.30
+Atoms_v1_f07_Velocity       0.0010   7.92    0.0035   17.37  0.008  0.013  1.64     128.0    0.17       0.45
+Atoms_v1_f08_Gap            0.0043   7.77    0.0049   4.73   0.047  0.337  1.64     128.0    0.13       0.06
+Atoms_v1_f09_Absorb         0.0047   13.80   0.0059   13.88  0.059  0.054  1.63     103.0    0.37       0.33
+Atoms_v1_f10_TCI_EMA_8s     -0.0036  -7.88   0.0065   -4.85  0.989  0.980  50.66    19190.0  -0.97      1.33
+Atoms_v1_f11_TCI_EMA_30s    -0.0058  -6.36   -0.0009  -5.68  0.998  0.996  135.19   50864.0  -4.48      -0.15
+Atoms_v1_f12_OFI_EMA_15s    -0.0060  -13.79  0.0147   -4.46  0.991  0.990  139.90   22444.0  -6.57      12.87
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0036  -4.77   -0.0003  -4.80  0.999  0.999  227.79   59232.0  -4.91      0.26
+
+-- Monotonicity Check (IS) Horizon 120.000s --
+FEATURE                    MONO   B1(Sell) B2  B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.915  0.1      0.1 0.2 0.3  0.3
+Atoms_v1_f02_TCI           0.605  -0.0     0.3 0.1 0.4  0.2
+Atoms_v1_f03_Sweep         0.804  -0.0     0.3 0.2 0.2  0.3
+Atoms_v1_f04_Fragility     0.791  0.1      0.1 0.2 0.2  0.2
+Atoms_v1_f05_Lumpiness     0.915  0.1      0.1 0.2 0.3  0.3
+Atoms_v1_f06_DGT           0.676  0.2      0.2 0.1 0.2  0.3
+Atoms_v1_f07_Velocity      0.821  -0.1     0.1 0.4 0.2  0.4
+Atoms_v1_f08_Gap           0.761  -0.0     0.1 0.3 0.4  0.2
+Atoms_v1_f09_Absorb        0.633  -0.0     0.3 0.2 0.2  0.3
+Atoms_v1_f10_TCI_EMA_8s    -0.831 0.4      0.8 0.3 -0.2 -0.4
+Atoms_v1_f11_TCI_EMA_30s   -0.917 0.6      0.7 0.5 -0.3 -0.6
+Atoms_v1_f12_OFI_EMA_15s   -0.992 1.1      0.7 0.3 -0.3 -0.9
+Atoms_v1_f13_TCI_CUSUM_60s -0.951 0.6      0.7 0.3 -0.2 -0.5
+
+== Horizon 300.000s [IS: 1461 | OOS: 702] ==
+FEATURE                     IS_IC    IS_T    OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            -0.0003  -6.37   0.0059   5.67   0.098  0.084  3.11     1103.0   -0.01      0.25
+Atoms_v1_f02_TCI            0.0020   -4.25   0.0269   7.20   0.357  0.000  3.11     1103.0   0.06       0.60
+Atoms_v1_f03_Sweep          0.0012   -4.81   0.0133   9.13   0.110  0.071  3.11     1103.0   0.04       0.30
+Atoms_v1_f04_Fragility      0.0030   0.85    0.0264   14.93  0.190  0.225  3.11     1103.0   0.08       0.41
+Atoms_v1_f05_Lumpiness      -0.0001  -1.82   0.0008   8.51   0.018  0.018  3.11     1103.0   -0.06      0.95
+Atoms_v1_f06_DGT            -0.0020  -10.02  0.0043   3.75   0.073  0.064  2.33     1101.0   -0.12      0.20
+Atoms_v1_f07_Velocity       0.0001   -0.19   0.0023   10.85  0.008  0.013  1.64     128.0    0.02       0.42
+Atoms_v1_f08_Gap            0.0033   4.74    0.0037   1.49   0.047  0.337  1.64     128.0    0.13       0.07
+Atoms_v1_f09_Absorb         0.0032   8.09    0.0043   7.77   0.059  0.054  1.63     103.0    0.34       0.34
+Atoms_v1_f10_TCI_EMA_8s     -0.0069  -8.67   0.0068   -5.12  0.989  0.980  50.66    19190.0  -2.43      2.00
+Atoms_v1_f11_TCI_EMA_30s    -0.0139  -6.91   0.0014   -4.69  0.998  0.996  135.19   50864.0  -14.06     1.86
+Atoms_v1_f12_OFI_EMA_15s    -0.0169  -16.97  0.0080   -7.27  0.991  0.990  139.90   22444.0  -24.06     10.07
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0169  -4.91   -0.0004  -3.83  0.999  0.999  227.79   59232.0  -32.07     0.86
+
+-- Monotonicity Check (IS) Horizon 300.000s --
+FEATURE                    MONO   B1(Sell) B2  B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           -0.641 0.6      0.4 0.4 0.4  0.4
+Atoms_v1_f02_TCI           -0.082 0.4      0.7 0.1 0.5  0.5
+Atoms_v1_f03_Sweep         -0.236 0.5      0.6 0.3 0.4  0.5
+Atoms_v1_f04_Fragility     -0.523 0.5      0.4 0.6 0.4  0.3
+Atoms_v1_f05_Lumpiness     -0.641 0.6      0.4 0.4 0.4  0.4
+Atoms_v1_f06_DGT           -0.650 0.6      0.5 0.3 0.3  0.4
+Atoms_v1_f07_Velocity      0.758  0.2      0.3 0.7 0.4  0.6
+Atoms_v1_f08_Gap           0.525  0.1      0.4 0.6 0.7  0.4
+Atoms_v1_f09_Absorb        -0.704 0.5      0.7 0.3 0.4  0.3
+Atoms_v1_f10_TCI_EMA_8s    -0.837 0.7      1.2 0.7 -0.1 -0.3
+Atoms_v1_f11_TCI_EMA_30s   -0.938 1.0      1.1 0.7 -0.2 -0.5
+Atoms_v1_f12_OFI_EMA_15s   -0.993 1.8      1.1 0.5 -0.1 -1.2
+Atoms_v1_f13_TCI_CUSUM_60s -0.979 1.3      1.1 0.5 -0.3 -0.4
+
+
+>>> STUDY: ETHUSDT <<<
+Variants: 1 | Days: 2102
+[========================================] 100.0% (2102/2102) | 121.8 days/s  
+== Horizon 0.500s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC    IS_T   OOS_IC  OOS_T   AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0636   65.87  0.0840  71.65   0.156  0.143  3.44     689.0    0.36       0.43
+Atoms_v1_f02_TCI            0.1433   63.64  0.3220  118.08  0.418  0.000  3.44     689.0    0.49       1.00
+Atoms_v1_f03_Sweep          0.1133   80.23  0.1658  88.60   0.144  0.062  3.44     689.0    0.38       0.46
+Atoms_v1_f04_Fragility      0.0362   38.33  0.1580  59.85   0.134  0.248  3.44     689.0    0.13       0.38
+Atoms_v1_f05_Lumpiness      0.0104   35.43  0.0086  29.82   0.039  0.040  3.44     689.0    0.61       0.80
+Atoms_v1_f06_DGT            0.0469   56.76  0.0788  67.48   0.132  0.117  2.37     689.0    0.28       0.45
+Atoms_v1_f07_Velocity       0.0191   56.03  0.0225  51.43   0.007  0.010  1.82     144.0    0.38       0.47
+Atoms_v1_f08_Gap            0.0200   55.51  0.0269  57.63   0.091  0.370  1.82     144.0    0.10       0.06
+Atoms_v1_f09_Absorb         0.0456   61.11  0.0316  56.71   0.088  0.086  1.69     128.0    0.50       0.32
+Atoms_v1_f10_TCI_EMA_8s     0.0352   32.24  0.0543  22.44   0.975  0.964  38.92    17037.0  1.02       1.92
+Atoms_v1_f11_TCI_EMA_30s    0.0061   10.04  0.0163  6.18    0.995  0.991  98.96    47273.0  0.48       1.66
+Atoms_v1_f12_OFI_EMA_15s    0.0338   32.41  0.0437  29.72   0.971  0.971  97.99    21626.0  2.92       12.04
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0007  3.76   0.0077  2.42    0.998  0.997  166.78   58483.0  -0.07      1.48
+
+-- Monotonicity Check (IS) Horizon 0.500s --
+FEATURE                    MONO  B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI           0.999 -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f02_TCI           0.947 -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Sweep         1.000 -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f04_Fragility     0.908 -0.2     -0.3 0.0 0.3 0.2
+Atoms_v1_f05_Lumpiness     0.999 -0.4     -0.2 0.0 0.2 0.4
+Atoms_v1_f06_DGT           0.995 -0.3     -0.2 0.0 0.2 0.4
+Atoms_v1_f07_Velocity      0.945 -0.4     -0.0 0.0 0.1 0.4
+Atoms_v1_f08_Gap           0.892 -0.2     -0.2 0.0 0.3 0.2
+Atoms_v1_f09_Absorb        0.888 -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f10_TCI_EMA_8s    0.991 -0.1     -0.0 0.0 0.1 0.1
+Atoms_v1_f11_TCI_EMA_30s   0.991 -0.0     0.0  0.0 0.0 0.0
+Atoms_v1_f12_OFI_EMA_15s   0.994 -0.1     -0.0 0.0 0.1 0.2
+Atoms_v1_f13_TCI_CUSUM_60s 0.731 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 1.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T   AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0601  68.80  0.0721  64.15   0.156  0.143  3.44     689.0    0.42       0.44
+Atoms_v1_f02_TCI            0.1262  62.84  0.2876  107.12  0.418  0.000  3.44     689.0    0.55       1.07
+Atoms_v1_f03_Sweep          0.0995  81.25  0.1482  83.56   0.144  0.062  3.44     689.0    0.42       0.49
+Atoms_v1_f04_Fragility      0.0324  37.29  0.1435  61.00   0.134  0.248  3.44     689.0    0.14       0.41
+Atoms_v1_f05_Lumpiness      0.0100  45.77  0.0075  28.15   0.039  0.040  3.44     689.0    0.73       0.84
+Atoms_v1_f06_DGT            0.0450  56.77  0.0670  59.91   0.132  0.117  2.37     689.0    0.34       0.46
+Atoms_v1_f07_Velocity       0.0175  55.00  0.0198  48.63   0.007  0.010  1.82     144.0    0.44       0.50
+Atoms_v1_f08_Gap            0.0203  59.17  0.0255  57.67   0.091  0.370  1.82     144.0    0.12       0.07
+Atoms_v1_f09_Absorb         0.0419  79.62  0.0281  53.41   0.088  0.086  1.69     128.0    0.58       0.34
+Atoms_v1_f10_TCI_EMA_8s     0.0371  27.11  0.0503  18.43   0.975  0.964  38.92    17037.0  1.35       2.11
+Atoms_v1_f11_TCI_EMA_30s    0.0086  7.76   0.0146  4.74    0.995  0.991  98.96    47273.0  0.84       1.77
+Atoms_v1_f12_OFI_EMA_15s    0.0364  29.99  0.0376  24.60   0.971  0.971  97.99    21626.0  3.95       12.34
+Atoms_v1_f13_TCI_CUSUM_60s  0.0016  2.14   0.0066  1.56    0.998  0.997  166.78   58483.0  0.31       1.51
+
+-- Monotonicity Check (IS) Horizon 1.000s --
+FEATURE                    MONO  B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI           0.999 -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f02_TCI           0.945 -0.3     -0.3 0.0 0.3 0.3
+Atoms_v1_f03_Sweep         1.000 -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f04_Fragility     0.910 -0.2     -0.3 0.0 0.3 0.3
+Atoms_v1_f05_Lumpiness     0.999 -0.4     -0.2 0.0 0.2 0.5
+Atoms_v1_f06_DGT           0.995 -0.4     -0.2 0.0 0.3 0.4
+Atoms_v1_f07_Velocity      0.948 -0.4     -0.0 0.0 0.1 0.5
+Atoms_v1_f08_Gap           0.885 -0.2     -0.3 0.0 0.3 0.2
+Atoms_v1_f09_Absorb        0.889 -0.1     0.0  0.0 0.0 0.1
+Atoms_v1_f10_TCI_EMA_8s    0.990 -0.1     -0.0 0.0 0.1 0.2
+Atoms_v1_f11_TCI_EMA_30s   0.999 -0.0     0.0  0.0 0.0 0.1
+Atoms_v1_f12_OFI_EMA_15s   0.990 -0.1     -0.0 0.0 0.1 0.2
+Atoms_v1_f13_TCI_CUSUM_60s 0.666 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 2.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC   IS_T   OOS_IC  OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0534  66.39  0.0597  56.65  0.156  0.143  3.44     689.0    0.50       0.46
+Atoms_v1_f02_TCI            0.1060  61.15  0.2445  96.00  0.418  0.000  3.44     689.0    0.61       1.13
+Atoms_v1_f03_Sweep          0.0830  78.42  0.1268  77.50  0.144  0.062  3.44     689.0    0.47       0.52
+Atoms_v1_f04_Fragility      0.0274  36.28  0.1234  60.82  0.134  0.248  3.44     689.0    0.16       0.43
+Atoms_v1_f05_Lumpiness      0.0090  44.10  0.0063  26.65  0.039  0.040  3.44     689.0    0.88       0.87
+Atoms_v1_f06_DGT            0.0412  56.22  0.0552  51.27  0.132  0.117  2.37     689.0    0.41       0.47
+Atoms_v1_f07_Velocity       0.0153  52.98  0.0161  43.00  0.007  0.010  1.82     144.0    0.52       0.50
+Atoms_v1_f08_Gap            0.0179  59.52  0.0231  56.37  0.091  0.370  1.82     144.0    0.15       0.08
+Atoms_v1_f09_Absorb         0.0353  72.15  0.0238  50.35  0.088  0.086  1.69     128.0    0.65       0.36
+Atoms_v1_f10_TCI_EMA_8s     0.0338  20.21  0.0437  15.27  0.975  0.964  38.92    17037.0  1.65       2.28
+Atoms_v1_f11_TCI_EMA_30s    0.0092  5.05   0.0120  3.73   0.995  0.991  98.96    47273.0  1.18       1.82
+Atoms_v1_f12_OFI_EMA_15s    0.0336  23.20  0.0304  19.48  0.971  0.971  97.99    21626.0  4.87       12.37
+Atoms_v1_f13_TCI_CUSUM_60s  0.0029  0.67   0.0052  1.10   0.998  0.997  166.78   58483.0  0.69       1.47
+
+-- Monotonicity Check (IS) Horizon 2.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4  B5(Buy)
+Atoms_v1_f01_OFI           0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f02_TCI           0.945  -0.3     -0.3 0.0 0.4 0.4
+Atoms_v1_f03_Sweep         1.000  -0.5     -0.2 0.0 0.3 0.6
+Atoms_v1_f04_Fragility     0.912  -0.3     -0.3 0.0 0.4 0.3
+Atoms_v1_f05_Lumpiness     0.999  -0.4     -0.2 0.0 0.3 0.5
+Atoms_v1_f06_DGT           0.994  -0.4     -0.3 0.0 0.3 0.5
+Atoms_v1_f07_Velocity      0.948  -0.5     -0.1 0.0 0.1 0.5
+Atoms_v1_f08_Gap           0.880  -0.2     -0.3 0.0 0.4 0.2
+Atoms_v1_f09_Absorb        0.877  -0.2     0.0  0.0 0.0 0.2
+Atoms_v1_f10_TCI_EMA_8s    0.991  -0.1     -0.0 0.0 0.1 0.2
+Atoms_v1_f11_TCI_EMA_30s   0.984  -0.0     0.0  0.0 0.0 0.1
+Atoms_v1_f12_OFI_EMA_15s   0.981  -0.2     -0.0 0.0 0.1 0.2
+Atoms_v1_f13_TCI_CUSUM_60s -0.157 0.0      0.0  0.0 0.0 0.0
+
+== Horizon 5.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC   IS_T   OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0358  54.17  0.0424   48.26  0.156  0.143  3.44     689.0    0.50       0.44
+Atoms_v1_f02_TCI            0.0696  51.18  0.1812   73.01  0.418  0.000  3.44     689.0    0.60       1.13
+Atoms_v1_f03_Sweep          0.0556  63.43  0.0945   64.36  0.144  0.062  3.44     689.0    0.47       0.52
+Atoms_v1_f04_Fragility      0.0185  32.83  0.0935   56.81  0.134  0.248  3.44     689.0    0.16       0.44
+Atoms_v1_f05_Lumpiness      0.0058  35.83  0.0047   24.81  0.039  0.040  3.44     689.0    0.85       0.88
+Atoms_v1_f06_DGT            0.0265  44.65  0.0385   41.30  0.132  0.117  2.37     689.0    0.39       0.44
+Atoms_v1_f07_Velocity       0.0098  42.88  0.0119   33.07  0.007  0.010  1.82     144.0    0.49       0.50
+Atoms_v1_f08_Gap            0.0134  58.08  0.0188   47.91  0.091  0.370  1.82     144.0    0.16       0.09
+Atoms_v1_f09_Absorb         0.0256  62.76  0.0183   44.09  0.088  0.086  1.69     128.0    0.70       0.37
+Atoms_v1_f10_TCI_EMA_8s     0.0227  9.98   0.0289   7.71   0.975  0.964  38.92    17037.0  1.66       2.04
+Atoms_v1_f11_TCI_EMA_30s    0.0071  0.23   0.0040   -0.24  0.995  0.991  98.96    47273.0  1.37       0.85
+Atoms_v1_f12_OFI_EMA_15s    0.0194  10.65  0.0184   9.89   0.971  0.971  97.99    21626.0  4.19       10.11
+Atoms_v1_f13_TCI_CUSUM_60s  0.0037  -2.18  -0.0015  -1.79  0.998  0.997  166.78   58483.0  1.35       -0.53
+
+-- Monotonicity Check (IS) Horizon 5.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.999  -0.4     -0.2 0.0 0.3  0.5
+Atoms_v1_f02_TCI           0.941  -0.3     -0.3 0.0 0.4  0.4
+Atoms_v1_f03_Sweep         1.000  -0.5     -0.2 0.1 0.3  0.6
+Atoms_v1_f04_Fragility     0.914  -0.3     -0.3 0.1 0.4  0.3
+Atoms_v1_f05_Lumpiness     0.999  -0.4     -0.2 0.0 0.3  0.5
+Atoms_v1_f06_DGT           0.994  -0.4     -0.2 0.0 0.3  0.5
+Atoms_v1_f07_Velocity      0.932  -0.5     -0.0 0.1 0.1  0.5
+Atoms_v1_f08_Gap           0.901  -0.2     -0.2 0.1 0.4  0.3
+Atoms_v1_f09_Absorb        0.832  -0.2     0.1  0.1 0.1  0.2
+Atoms_v1_f10_TCI_EMA_8s    0.911  -0.1     0.1  0.0 0.1  0.2
+Atoms_v1_f11_TCI_EMA_30s   -0.459 0.0      0.1  0.0 0.0  0.0
+Atoms_v1_f12_OFI_EMA_15s   0.937  -0.1     0.0  0.1 0.1  0.1
+Atoms_v1_f13_TCI_CUSUM_60s -0.784 0.1      0.1  0.1 -0.0 -0.0
+
+== Horizon 10.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC   IS_T   OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0265  45.25  0.0306   39.21  0.156  0.143  3.44     689.0    0.49       0.41
+Atoms_v1_f02_TCI            0.0515  44.37  0.1353   60.74  0.418  0.000  3.44     689.0    0.59       1.10
+Atoms_v1_f03_Sweep          0.0400  54.25  0.0704   52.59  0.144  0.062  3.44     689.0    0.45       0.51
+Atoms_v1_f04_Fragility      0.0139  29.62  0.0713   50.25  0.134  0.248  3.44     689.0    0.16       0.44
+Atoms_v1_f05_Lumpiness      0.0041  28.25  0.0036   22.47  0.039  0.040  3.44     689.0    0.80       0.87
+Atoms_v1_f06_DGT            0.0189  36.33  0.0275   34.30  0.132  0.117  2.37     689.0    0.37       0.41
+Atoms_v1_f07_Velocity       0.0066  35.62  0.0091   27.17  0.007  0.010  1.82     144.0    0.44       0.50
+Atoms_v1_f08_Gap            0.0114  50.67  0.0146   37.18  0.091  0.370  1.82     144.0    0.18       0.09
+Atoms_v1_f09_Absorb         0.0201  55.83  0.0136   40.13  0.088  0.086  1.69     128.0    0.73       0.36
+Atoms_v1_f10_TCI_EMA_8s     0.0177  4.13   0.0224   3.43   0.975  0.964  38.92    17037.0  1.72       2.08
+Atoms_v1_f11_TCI_EMA_30s    0.0078  -2.29  0.0039   -1.55  0.995  0.991  98.96    47273.0  2.03       1.11
+Atoms_v1_f12_OFI_EMA_15s    0.0104  2.59   0.0136   4.50   0.971  0.971  97.99    21626.0  3.01       9.72
+Atoms_v1_f13_TCI_CUSUM_60s  0.0067  -3.48  -0.0011  -2.39  0.998  0.997  166.78   58483.0  3.16       -0.45
+
+-- Monotonicity Check (IS) Horizon 10.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.999  -0.4     -0.2 0.1 0.3  0.6
+Atoms_v1_f02_TCI           0.931  -0.3     -0.3 0.1 0.4  0.4
+Atoms_v1_f03_Sweep         0.998  -0.4     -0.2 0.1 0.3  0.6
+Atoms_v1_f04_Fragility     0.918  -0.2     -0.3 0.1 0.4  0.4
+Atoms_v1_f05_Lumpiness     0.999  -0.4     -0.2 0.1 0.3  0.6
+Atoms_v1_f06_DGT           0.994  -0.3     -0.2 0.1 0.3  0.5
+Atoms_v1_f07_Velocity      0.934  -0.4     0.0  0.1 0.1  0.6
+Atoms_v1_f08_Gap           0.898  -0.2     -0.2 0.1 0.4  0.3
+Atoms_v1_f09_Absorb        0.790  -0.1     0.1  0.1 0.1  0.2
+Atoms_v1_f10_TCI_EMA_8s    0.545  -0.1     0.2  0.1 0.0  0.2
+Atoms_v1_f11_TCI_EMA_30s   -0.579 0.1      0.2  0.1 -0.0 -0.0
+Atoms_v1_f12_OFI_EMA_15s   -0.962 0.1      0.1  0.1 0.1  0.0
+Atoms_v1_f13_TCI_CUSUM_60s -0.752 0.1      0.2  0.2 -0.0 -0.1
+
+== Horizon 30.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC    IS_T   OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0135   30.16  0.0168   27.92  0.156  0.143  3.44     689.0    0.40       0.36
+Atoms_v1_f02_TCI            0.0251   27.69  0.0780   45.31  0.418  0.000  3.44     689.0    0.46       1.01
+Atoms_v1_f03_Sweep          0.0200   35.35  0.0406   42.74  0.144  0.062  3.44     689.0    0.36       0.47
+Atoms_v1_f04_Fragility      0.0069   20.02  0.0425   44.37  0.134  0.248  3.44     689.0    0.13       0.42
+Atoms_v1_f05_Lumpiness      0.0021   20.12  0.0021   16.78  0.039  0.040  3.44     689.0    0.65       0.82
+Atoms_v1_f06_DGT            0.0083   22.67  0.0148   23.29  0.132  0.117  2.37     689.0    0.26       0.35
+Atoms_v1_f07_Velocity       0.0031   21.69  0.0053   22.68  0.007  0.010  1.82     144.0    0.33       0.46
+Atoms_v1_f08_Gap            0.0071   29.77  0.0090   19.44  0.091  0.370  1.82     144.0    0.18       0.09
+Atoms_v1_f09_Absorb         0.0124   39.76  0.0080   28.40  0.088  0.086  1.69     128.0    0.73       0.34
+Atoms_v1_f10_TCI_EMA_8s     0.0062   -3.23  0.0052   -2.25  0.975  0.964  38.92    17037.0  1.01       0.82
+Atoms_v1_f11_TCI_EMA_30s    0.0056   -5.45  -0.0061  -4.02  0.995  0.991  98.96    47273.0  2.44       -2.37
+Atoms_v1_f12_OFI_EMA_15s    -0.0034  -6.13  0.0006   -2.59  0.971  0.971  97.99    21626.0  -1.54      0.67
+Atoms_v1_f13_TCI_CUSUM_60s  0.0080   -5.31  -0.0103  -3.93  0.998  0.997  166.78   58483.0  6.08       -7.89
+
+-- Monotonicity Check (IS) Horizon 30.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.997  -0.2     0.0  0.2 0.4  0.6
+Atoms_v1_f02_TCI           0.910  -0.1     -0.1 0.3 0.4  0.4
+Atoms_v1_f03_Sweep         0.977  -0.2     -0.1 0.3 0.3  0.6
+Atoms_v1_f04_Fragility     0.907  -0.0     -0.1 0.2 0.4  0.4
+Atoms_v1_f05_Lumpiness     0.997  -0.2     0.0  0.2 0.4  0.6
+Atoms_v1_f06_DGT           0.994  -0.1     0.0  0.1 0.4  0.5
+Atoms_v1_f07_Velocity      0.883  -0.3     0.1  0.3 0.1  0.6
+Atoms_v1_f08_Gap           0.895  -0.1     -0.0 0.3 0.4  0.3
+Atoms_v1_f09_Absorb        0.142  0.1      0.2  0.3 0.1  0.2
+Atoms_v1_f10_TCI_EMA_8s    -0.390 0.1      0.5  0.3 0.1  0.0
+Atoms_v1_f11_TCI_EMA_30s   -0.897 0.3      0.5  0.2 0.0  -0.1
+Atoms_v1_f12_OFI_EMA_15s   -0.986 0.6      0.3  0.2 0.1  -0.3
+Atoms_v1_f13_TCI_CUSUM_60s -0.900 0.4      0.4  0.3 -0.0 -0.2
+
+== Horizon 60.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC    IS_T   OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0086   18.03  0.0109   15.83  0.156  0.143  3.44     689.0    0.31       0.31
+Atoms_v1_f02_TCI            0.0160   17.37  0.0531   28.57  0.418  0.000  3.44     689.0    0.36       0.90
+Atoms_v1_f03_Sweep          0.0127   21.76  0.0277   29.42  0.144  0.062  3.44     689.0    0.28       0.42
+Atoms_v1_f04_Fragility      0.0045   13.99  0.0303   33.28  0.134  0.248  3.44     689.0    0.11       0.39
+Atoms_v1_f05_Lumpiness      0.0011   11.33  0.0013   11.57  0.039  0.040  3.44     689.0    0.43       0.65
+Atoms_v1_f06_DGT            0.0040   11.19  0.0091   12.73  0.132  0.117  2.37     689.0    0.15       0.29
+Atoms_v1_f07_Velocity       0.0021   14.95  0.0038   17.20  0.007  0.010  1.82     144.0    0.28       0.44
+Atoms_v1_f08_Gap            0.0059   19.31  0.0066   11.09  0.091  0.370  1.82     144.0    0.19       0.09
+Atoms_v1_f09_Absorb         0.0100   32.04  0.0059   17.89  0.088  0.086  1.69     128.0    0.72       0.33
+Atoms_v1_f10_TCI_EMA_8s     -0.0018  -5.79  -0.0013  -4.75  0.975  0.964  38.92    17037.0  -0.29      -0.18
+Atoms_v1_f11_TCI_EMA_30s    -0.0084  -6.17  -0.0126  -4.88  0.995  0.991  98.96    47273.0  -3.98      -6.85
+Atoms_v1_f12_OFI_EMA_15s    -0.0064  -9.36  -0.0028  -5.57  0.971  0.971  97.99    21626.0  -3.60      -4.29
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0087  -5.63  -0.0171  -4.23  0.998  0.997  166.78   58483.0  -7.44      -17.80
+
+-- Monotonicity Check (IS) Horizon 60.000s --
+FEATURE                    MONO   B1(Sell) B2   B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.992  -0.0     0.1  0.2 0.3  0.5
+Atoms_v1_f02_TCI           0.876  -0.0     -0.0 0.3 0.4  0.3
+Atoms_v1_f03_Sweep         0.945  -0.2     0.0  0.4 0.3  0.5
+Atoms_v1_f04_Fragility     0.882  0.0      0.0  0.3 0.4  0.3
+Atoms_v1_f05_Lumpiness     0.992  -0.0     0.1  0.2 0.3  0.5
+Atoms_v1_f06_DGT           0.984  0.0      0.1  0.2 0.3  0.4
+Atoms_v1_f07_Velocity      0.864  -0.3     0.1  0.4 0.2  0.6
+Atoms_v1_f08_Gap           0.833  -0.2     -0.0 0.4 0.5  0.3
+Atoms_v1_f09_Absorb        0.500  -0.1     0.2  0.5 0.2  0.3
+Atoms_v1_f10_TCI_EMA_8s    -0.735 0.2      0.6  0.4 -0.1 -0.2
+Atoms_v1_f11_TCI_EMA_30s   -0.922 0.5      0.6  0.3 -0.0 -0.3
+Atoms_v1_f12_OFI_EMA_15s   -0.990 0.9      0.5  0.1 -0.1 -0.4
+Atoms_v1_f13_TCI_CUSUM_60s -0.901 0.4      0.6  0.4 0.0  -0.4
+
+== Horizon 120.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC    IS_T    OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0045   8.07    0.0064   7.72   0.156  0.143  3.44     689.0    0.21       0.24
+Atoms_v1_f02_TCI            0.0078   7.85    0.0337   15.33  0.418  0.000  3.44     689.0    0.23       0.76
+Atoms_v1_f03_Sweep          0.0067   10.57   0.0177   17.50  0.144  0.062  3.44     689.0    0.19       0.36
+Atoms_v1_f04_Fragility      0.0022   8.26    0.0208   23.04  0.134  0.248  3.44     689.0    0.07       0.36
+Atoms_v1_f05_Lumpiness      0.0005   5.75    0.0010   8.09   0.039  0.040  3.44     689.0    0.26       0.68
+Atoms_v1_f06_DGT            0.0008   2.14    0.0049   5.45   0.132  0.117  2.37     689.0    0.04       0.21
+Atoms_v1_f07_Velocity       0.0010   7.94    0.0027   8.96   0.007  0.010  1.82     144.0    0.17       0.41
+Atoms_v1_f08_Gap            0.0049   11.62   0.0045   4.36   0.091  0.370  1.82     144.0    0.20       0.08
+Atoms_v1_f09_Absorb         0.0076   22.64   0.0042   12.24  0.088  0.086  1.69     128.0    0.71       0.31
+Atoms_v1_f10_TCI_EMA_8s     -0.0032  -6.56   -0.0084  -6.87  0.975  0.964  38.92    17037.0  -0.71      -2.15
+Atoms_v1_f11_TCI_EMA_30s    -0.0083  -5.96   -0.0200  -5.54  0.995  0.991  98.96    47273.0  -5.02      -14.92
+Atoms_v1_f12_OFI_EMA_15s    -0.0101  -11.37  -0.0091  -7.63  0.971  0.971  97.99    21626.0  -7.31      -18.17
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0086  -4.94   -0.0234  -4.36  0.998  0.997  166.78   58483.0  -9.42      -32.99
+
+-- Monotonicity Check (IS) Horizon 120.000s --
+FEATURE                    MONO   B1(Sell) B2  B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           0.894  0.2      0.3 0.2 0.3  0.5
+Atoms_v1_f02_TCI           0.526  0.1      0.3 0.2 0.6  0.3
+Atoms_v1_f03_Sweep         0.903  0.0      0.3 0.3 0.4  0.5
+Atoms_v1_f04_Fragility     0.692  0.2      0.2 0.4 0.4  0.3
+Atoms_v1_f05_Lumpiness     0.894  0.2      0.3 0.2 0.3  0.5
+Atoms_v1_f06_DGT           0.596  0.3      0.3 0.2 0.3  0.4
+Atoms_v1_f07_Velocity      0.805  -0.1     0.3 0.4 0.2  0.7
+Atoms_v1_f08_Gap           0.786  -0.1     0.3 0.4 0.5  0.4
+Atoms_v1_f09_Absorb        0.327  -0.2     0.6 0.5 0.3  0.3
+Atoms_v1_f10_TCI_EMA_8s    -0.662 0.3      0.8 0.6 -0.0 -0.2
+Atoms_v1_f11_TCI_EMA_30s   -0.894 0.6      0.7 0.5 0.1  -0.4
+Atoms_v1_f12_OFI_EMA_15s   -0.999 1.3      0.8 0.3 -0.2 -0.7
+Atoms_v1_f13_TCI_CUSUM_60s -0.905 0.6      0.6 0.4 0.2  -0.4
+
+== Horizon 300.000s [IS: 1431 | OOS: 671] ==
+FEATURE                     IS_IC    IS_T    OOS_IC   OOS_T  AC1    |AC1|  AVG_SEG  MAX_SEG  IS_BPS/TR  OOS_BPS/TR
+Atoms_v1_f01_OFI            0.0010   -3.51   0.0030   -0.50  0.156  0.143  3.44     689.0    0.06       0.16
+Atoms_v1_f02_TCI            0.0025   -1.27   0.0183   4.89   0.418  0.000  3.44     689.0    0.09       0.58
+Atoms_v1_f03_Sweep          0.0020   -1.99   0.0096   5.12   0.144  0.062  3.44     689.0    0.08       0.27
+Atoms_v1_f04_Fragility      0.0010   2.69    0.0116   11.83  0.134  0.248  3.44     689.0    0.04       0.28
+Atoms_v1_f05_Lumpiness      -0.0001  -1.88   0.0007   2.31   0.039  0.040  3.44     689.0    -0.05      0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+     0.27
+Atoms_v1_f04_Fragility      0.0010   2.69    0.0116   11.83  0.134  0.248  3.44     689.0    0.04       0.28
+Atoms_v1_f05_Lumpiness      -0.0001  -1.88   0.0007   2.31   0.039  0.040  3.44     689.0    -0.05      0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f04_Fragility      0.0010   2.69    0.0116   11.83  0.134  0.248  3.44     689.0    0.04       0.28
+Atoms_v1_f05_Lumpiness      -0.0001  -1.88   0.0007   2.31   0.039  0.040  3.44     689.0    -0.05      0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+     0.28
+Atoms_v1_f05_Lumpiness      -0.0001  -1.88   0.0007   2.31   0.039  0.040  3.44     689.0    -0.05      0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f05_Lumpiness      -0.0001  -1.88   0.0007   2.31   0.039  0.040  3.44     689.0    -0.05      0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+     0.67
+Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62  Atoms_v1_f06_DGT            -0.0017  -8.40   0.0018   -2.10  0.132  0.117  2.37     689.0    -0.12      0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62       0.11
+Atoms_v1_f07_Velocity       0.0000   -0.67   0.0015   4.40   0.007  0.010  1.82     144.0    0.01       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62       0.33
+Atoms_v1_f08_Gap            0.0039   7.36    0.0032   2.53   0.091  0.370  1.82     144.0    0.21       0.07
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62       0.07
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62       0.30
+Atoms_v1_f09_Absorb         0.0049   14.58   0.0029   4.49   0.088  0.086  1.69     128.0    0.62       0.30
+     0.30
+Atoms_v1_f10_TCI_EMA_8s     -0.0035  -5.71   -0.0050  -6.15  0.975  0.964  38.92    17037.0  -1.04 Atoms_v1_f10_TCI_EMA_8s     -0.0035  -5.71   -0.0050  -6.15  0.975  0.964  38.92    17037.0  -1.04      -1.92
+Atoms_v1_f11_TCI_EMA_30s    -0.0087  -4.83   -0.0077  -4.99  0.995  0.991  98.96    47273.0  -7.16      -8.42
+Atoms_v1_f12_OFI_EMA_15s    -0.0163  -12.75  -0.0086  -9.65  0.971  0.971  97.99    21626.0  -15.99     -23.64
+Atoms_v1_f13_TCI_CUSUM_60s  -0.0122  -4.08   -0.0068  -3.83  0.998  0.997  166.78   58483.0  -18.30     -14.19
+
+-- Monotonicity Check (IS) Horizon 300.000s --
+FEATURE                    MONO   B1(Sell) B2  B3  B4   B5(Buy)
+Atoms_v1_f01_OFI           -0.268 0.5      0.5 0.4 0.4  0.5
+Atoms_v1_f02_TCI           0.012  0.3      0.7 0.2 0.8  0.3
+Atoms_v1_f03_Sweep         -0.066 0.4      0.6 0.3 0.6  0.4
+Atoms_v1_f04_Fragility     -0.460 0.5      0.4 0.6 0.4  0.3
+Atoms_v1_f05_Lumpiness     -0.268 0.5      0.5 0.4 0.4  0.5
+Atoms_v1_f06_DGT           -0.730 0.6      0.5 0.3 0.4  0.4
+Atoms_v1_f07_Velocity      0.844  0.0      0.5 0.6 0.4  0.7
+Atoms_v1_f08_Gap           0.701  0.0      0.4 0.7 0.7  0.5
+Atoms_v1_f09_Absorb        0.331  -0.0     0.8 0.4 0.7  0.3
+Atoms_v1_f10_TCI_EMA_8s    -0.652 0.4      1.0 0.7 0.0  0.0
+Atoms_v1_f11_TCI_EMA_30s   -0.953 0.9      0.8 0.6 0.2  -0.3
+Atoms_v1_f12_OFI_EMA_15s   -0.998 1.8      1.2 0.5 -0.2 -1.0
+Atoms_v1_f13_TCI_CUSUM_60s -0.951 1.0      0.8 0.6 0.3  -0.4
+
+[study] ALL COMPLETE in 41.7016767s
+
+[sys] Execution Time: 41.7021931s | Mem: 11458 MB
+PS Z:\Benchmarks>
+package main
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"iter"
+	"math"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"time"
+)
+
+// --- Atom / Feature Constants ---
+
+const (
+	EPS = 1e-9
+)
+
+type ofiTask struct {
+	Y, M, D        int
+	Offset, Length int64
+}
+
+// --- Execution Logic ---
+
+func runBuild() {
+	start := time.Now()
+
+	// Pipeline: Symbols -> Build
+	found := false
+	for sym := range discoverSymbols() {
+		found = true
+		buildForSymbol(sym)
+	}
+
+	if !found {
+		fmt.Printf("[build] no symbols discovered under %q\n", filepath.Join(BaseDir))
+	}
+	fmt.Printf("[build] Complete in %s\n", time.Since(start))
+}
+
+// discoverSymbols walks BaseDir and yields each symbol dir
+// (excludes 'features', 'common', dotdirs).
+func discoverSymbols() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		entries, err := os.ReadDir(BaseDir)
+		if err != nil {
+			fmt.Printf("[build] ReadDir(%s): %v\n", BaseDir, err)
+			return
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if name == "features" || name == "common" || len(name) == 0 || name[0] == '.' {
+				continue
+			}
+			if !yield(name) {
+				return
+			}
+		}
+	}
+}
+
+func buildForSymbol(sym string) {
+	fmt.Printf(">>> Building %s (Enhanced Atoms v2 – long-horizon)\n", sym)
+	featRoot := filepath.Join(BaseDir, "features", sym)
+
+	tasksCh := make(chan ofiTask, 1024)
+
+	outDir := filepath.Join(featRoot, "Atoms_v1")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		fmt.Printf("[build] MkdirAll(%s): %v\n", outDir, err)
+		return
+	}
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < CPUThreads; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var binBuf []byte
+			var gncBuf []byte
+			for t := range tasksCh {
+				processAtomDay(sym, t, outDir, &binBuf, &gncBuf)
+			}
+		}()
+	}
+
+	count := 0
+	for t := range discoverTasks(sym) {
+		tasksCh <- t
+		count++
+	}
+	close(tasksCh)
+
+	if count == 0 {
+		fmt.Printf("[build] no tasks for symbol %s\n", sym)
+	}
+
+	wg.Wait()
+}
+
+// discoverTasks walks the index files and yields (Y,M,D, offset,length)
+// for all days that have a GNC blob.
+func discoverTasks(sym string) iter.Seq[ofiTask] {
+	return func(yield func(ofiTask) bool) {
+		root := filepath.Join(BaseDir, sym)
+		years, err := os.ReadDir(root)
+		if err != nil {
+			return
+		}
+
+		for _, yDir := range years {
+			if !yDir.IsDir() {
+				continue
+			}
+			y, err := strconv.Atoi(yDir.Name())
+			if err != nil || y <= 0 {
+				continue
+			}
+			yearPath := filepath.Join(root, yDir.Name())
+			months, err := os.ReadDir(yearPath)
+			if err != nil {
+				continue
+			}
+			for _, mDir := range months {
+				if !mDir.IsDir() {
+					continue
+				}
+				m, err := strconv.Atoi(mDir.Name())
+				if err != nil || m < 1 || m > 12 {
+					continue
+				}
+
+				idxPath := filepath.Join(yearPath, mDir.Name(), "index.quantdev")
+				f, err := os.Open(idxPath)
+				if err != nil {
+					continue
+				}
+
+				var hdr [16]byte
+				if _, err := io.ReadFull(f, hdr[:]); err != nil {
+					f.Close()
+					continue
+				}
+				if string(hdr[0:4]) != IdxMagic {
+					f.Close()
+					continue
+				}
+				count := binary.LittleEndian.Uint64(hdr[8:])
+				var row [26]byte
+				for i := uint64(0); i < count; i++ {
+					if _, err := io.ReadFull(f, row[:]); err != nil {
+						break
+					}
+					d := int(binary.LittleEndian.Uint16(row[0:]))
+					offset := int64(binary.LittleEndian.Uint64(row[2:]))
+					length := int64(binary.LittleEndian.Uint64(row[10:]))
+					if length > 0 {
+						task := ofiTask{
+							Y: y, M: m, D: d,
+							Offset: offset, Length: length,
+						}
+						if !yield(task) {
+							f.Close()
+							return
+						}
+					}
+				}
+				f.Close()
+			}
+		}
+	}
+}
+
+// processAtomDay builds 13 features per tick:
+//
+//	0  OFI              (q * s)
+//	1  TCI              (s)
+//	2  Sweep            (m * s)
+//	3  Fragility        (m/q * s)
+//	4  Lumpiness        (q^2 * s)
+//	5  DGT              (q * s, aligned with price move)
+//	6  Velocity         (q/dt * s)
+//	7  Gap              (dt * s)
+//	8  Absorb           (q * s, against price move)
+//	9  TCI_EMA_8s       (time-aware EMA of s, tau≈8s)
+//
+// 10  TCI_EMA_30s      (time-aware EMA of s, tau≈30s)
+// 11  OFI_EMA_15s      (time-aware EMA of q*s, tau≈15s)
+// 12  TCI_CUSUM_60s    (time-aware EMA/integrator of s, tau≈60s)
+func processAtomDay(sym string, t ofiTask, outDir string, binBuf, gncBuf *[]byte) {
+	dateStr := fmt.Sprintf("%04d%02d%02d", t.Y, t.M, t.D)
+	outPath := filepath.Join(outDir, dateStr+".bin")
+
+	gncBlob, ok := loadRawGNC(sym, t, gncBuf)
+	if !ok {
+		return
+	}
+
+	colsAny := DayColumnPool.Get()
+	cols := colsAny.(*DayColumns)
+	cols.Reset()
+	defer DayColumnPool.Put(cols)
+
+	rowCount, ok := inflateGNCToColumns(gncBlob, cols)
+	if !ok || rowCount < 2 {
+		return
+	}
+
+	reqSize := rowCount * FeatRowBytes
+	if cap(*binBuf) < reqSize {
+		*binBuf = make([]byte, reqSize)
+	}
+	*binBuf = (*binBuf)[:reqSize]
+
+	times := cols.Times
+	qtys := cols.Qtys
+	prices := cols.Prices
+	sides := cols.Sides
+	matches := cols.Matches
+
+	writeVal := func(rowIdx, atomIdx int, val float64) {
+		off := rowIdx*FeatRowBytes + atomIdx*4
+		binary.LittleEndian.PutUint32((*binBuf)[off:], math.Float32bits(float32(val)))
+	}
+
+	prevP := prices[0]
+
+	// Time-aware EMA states
+	const (
+		tauTCIFast = 8.0  // seconds
+		tauTCISlow = 30.0 // seconds
+		tauOFI     = 15.0 // seconds
+		tauCUSUM   = 60.0 // seconds
+		dtEps      = 1e-6 // avoid degenerate dt
+	)
+	var (
+		tciEMAFast float64
+		tciEMASlow float64
+		ofiEMA     float64
+		tciCUSUM   float64
+		prevTime   int64
+	)
+
+	for i := 0; i < rowCount; i++ {
+		q := qtys[i]
+		s := float64(sides[i])
+		p := prices[i]
+		ts := times[i]
+
+		// Net flow
+		flow := q * s
+
+		m := 1.0
+		if len(matches) > i {
+			m = float64(matches[i])
+		}
+
+		// dt in seconds
+		dtSec := 0.0
+		if i > 0 {
+			dtMs := float64(ts - prevTime)
+			if dtMs < 0 {
+				dtMs = 0
+			}
+			dtSec = dtMs / 1000.0
+		}
+
+		dp := 0.0
+		if i > 0 {
+			dp = p - prevP
+		}
+
+		// --------- BASELINE ATOMS (0–8) ---------
+
+		// 0. OFI
+		writeVal(i, 0, flow)
+
+		// 1. TCI (raw sign)
+		writeVal(i, 1, s)
+
+		// 2. Sweep = matches * sign
+		writeVal(i, 2, m*s)
+
+		// 3. Fragility = (m/q)*s
+		valFrag := 0.0
+		if q > EPS {
+			valFrag = (m / q) * s
+		}
+		writeVal(i, 3, valFrag)
+
+		// 4. Lumpiness = q^2 * s
+		writeVal(i, 4, (q*q)*s)
+
+		// 5. DGT: trades that align with price move
+		signDp := 0.0
+		if dp > 0 {
+			signDp = 1.0
+		} else if dp < 0 {
+			signDp = -1.0
+		}
+		valDgt := 0.0
+		if s == signDp {
+			valDgt = q * s
+		}
+		writeVal(i, 5, valDgt)
+
+		// 6. Velocity = (q/dt)*s
+		vel := 0.0
+		if dtSec > 0 {
+			vel = (q / dtSec) * s
+		}
+		writeVal(i, 6, vel)
+
+		// 7. Gap = dt * s
+		writeVal(i, 7, dtSec*s)
+
+		// 8. Absorb = trades against last price move
+		valAbsorb := 0.0
+		if s != signDp {
+			valAbsorb = q * s
+		}
+		writeVal(i, 8, valAbsorb)
+
+		// --------- LONG-HORIZON ATOMS (9–12) ---------
+
+		// Guard dtSec
+		dts := dtSec
+		if dts < dtEps {
+			dts = dtEps
+		}
+
+		if i == 0 {
+			// initialize EMAs with first observation
+			tciEMAFast = s
+			tciEMASlow = s
+			ofiEMA = flow
+			tciCUSUM = s
+		} else {
+			// λ = exp(-dt / tau)
+			lamFast := math.Exp(-dts / tauTCIFast)
+			tciEMAFast = (1.0-lamFast)*s + lamFast*tciEMAFast
+
+			lamSlow := math.Exp(-dts / tauTCISlow)
+			tciEMASlow = (1.0-lamSlow)*s + lamSlow*tciEMASlow
+
+			lamOFI := math.Exp(-dts / tauOFI)
+			ofiEMA = (1.0-lamOFI)*flow + lamOFI*ofiEMA
+
+			lamCusum := math.Exp(-dts / tauCUSUM)
+			tciCUSUM = (1.0-lamCusum)*s + lamCusum*tciCUSUM
+		}
+
+		// 9. TCI_EMA_8s
+		writeVal(i, 9, tciEMAFast)
+
+		// 10. TCI_EMA_30s
+		writeVal(i, 10, tciEMASlow)
+
+		// 11. OFI_EMA_15s
+		writeVal(i, 11, ofiEMA)
+
+		// 12. TCI_CUSUM_60s
+		writeVal(i, 12, tciCUSUM)
+
+		prevP = p
+		prevTime = ts
+	}
+
+	if err := os.WriteFile(outPath, *binBuf, 0644); err != nil {
+		fmt.Printf("[build] WriteFile(%s): %v\n", outPath, err)
+	}
+}
+
+// loadRawGNC pulls a single GNC blob from data.quantdev at the given offset/length.
+func loadRawGNC(sym string, t ofiTask, buf *[]byte) ([]byte, bool) {
+	path := filepath.Join(BaseDir,
+		sym,
+		fmt.Sprintf("%04d", t.Y),
+		fmt.Sprintf("%02d", t.M),
+		"data.quantdev",
+	)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+
+	if _, err := f.Seek(t.Offset, io.SeekStart); err != nil {
+		return nil, false
+	}
+
+	if t.Length <= 0 || t.Length > 1<<31-1 {
+		return nil, false
+	}
+	need := int(t.Length)
+	if cap(*buf) < need {
+		*buf = make([]byte, need)
+	}
+	b := (*buf)[:need]
+
+	if _, err := io.ReadFull(f, b); err != nil {
+		return nil, false
+	}
+	if len(b) < 4 || string(b[0:4]) != GNCMagic {
+		return nil, false
+	}
+	return b, true
+}
+PS Z:\Benchmarks> go run . build
+go1.25.5 X:jsonv2,greenteagc | Env: windows/amd64 | Threads: 24 | RAM Limit: 24GB | GOGC: 200 | GOAMD64: v4
+>>> Building BTCUSDT (Atoms v4: Modular)
+>>> Building ETHUSDT (Atoms v4: Modular)
+[build] Complete in 42.5715786s
+
+[sys] Execution Time: 42.5715786s | Mem: 5973 MB
+PS Z:\Benchmarks> go run . study
+go1.25.5 X:jsonv2,greenteagc | Env: windows/amd64 | Threads: 24 | RAM Limit: 24GB | GOGC: 200 | GOAMD64: v4
+
+>>> STUDY: BTCUSDT <<<
+Variants: 1 | Days: 2163
+Progress: 99.3% (2147/2163)
+== Horizon 0.500s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0762  0.1981  0.68    2.33
+Impulse_15s       0.0572  0.1600  0.52    1.89
+OFI_Cubic_15s     0.0327  0.0850  10.33   27.01
+OFI_DEMA_15s      0.0589  0.1401  5.41    14.41
+OFI_DEMA_5s       0.0863  0.1731  4.79    12.10
+OFI_EMA_15s       0.0458  0.1224  5.53    15.58
+OFI_RSI_15s       0.0524  0.1548  4.82    13.54
+OFI_Raw           0.0709  0.0937  0.30    0.35
+OFI_TEMA_15s      0.0679  0.1510  5.26    13.66
+Sniper_Composite  0.0403  0.0972  8.68    23.38
+TCI_DEMA_15s      0.0345  0.0759  1.18    2.19
+TCI_EMA_15s       0.0210  0.0521  1.09    2.34
+TCI_Raw           0.1406  0.3204  0.38    0.77
+Vel_Inst          0.1074  0.1924  0.30    0.44
+
+== Horizon 1.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0728  0.1789  0.81    2.47
+Impulse_15s       0.0554  0.1448  0.63    2.01
+OFI_Cubic_15s     0.0328  0.0812  12.91   30.21
+OFI_DEMA_15s      0.0573  0.1291  6.56    15.56
+OFI_DEMA_5s       0.0812  0.1587  5.62    12.99
+OFI_EMA_15s       0.0451  0.1127  6.79    16.80
+OFI_RSI_15s       0.0500  0.1423  5.74    14.58
+OFI_Raw           0.0656  0.0832  0.34    0.36
+OFI_TEMA_15s      0.0653  0.1392  6.32    14.74
+Sniper_Composite  0.0399  0.0921  10.73   25.96
+TCI_DEMA_15s      0.0360  0.0728  1.53    2.47
+TCI_EMA_15s       0.0227  0.0489  1.46    2.57
+TCI_Raw           0.1233  0.2942  0.41    0.83
+Vel_Inst          0.0956  0.1674  0.33    0.45
+
+== Horizon 2.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0623  0.1616  0.93    2.67
+Impulse_15s       0.0471  0.1315  0.71    2.18
+OFI_Cubic_15s     0.0281  0.0747  14.78   33.31
+OFI_DEMA_15s      0.0509  0.1198  7.78    17.29
+OFI_DEMA_5s       0.0699  0.1459  6.47    14.31
+OFI_EMA_15s       0.0402  0.1045  8.10    18.68
+OFI_RSI_15s       0.0428  0.1302  6.57    15.98
+OFI_Raw           0.0561  0.0745  0.39    0.39
+OFI_TEMA_15s      0.0576  0.1287  7.44    16.33
+Sniper_Composite  0.0344  0.0849  12.36   28.67
+TCI_DEMA_15s      0.0339  0.0695  1.93    2.82
+TCI_EMA_15s       0.0219  0.0463  1.89    2.93
+TCI_Raw           0.1039  0.2679  0.47    0.90
+Vel_Inst          0.0812  0.1484  0.37    0.48
+
+== Horizon 5.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0374  0.1224  0.84    2.72
+Impulse_15s       0.0260  0.0987  0.59    2.20
+OFI_Cubic_15s     0.0149  0.0577  11.85   34.59
+OFI_DEMA_15s      0.0353  0.0930  8.16    18.06
+OFI_DEMA_5s       0.0496  0.1127  6.95    14.87
+OFI_EMA_15s       0.0265  0.0812  8.07    19.51
+OFI_RSI_15s       0.0238  0.1032  5.52    17.03
+OFI_Raw           0.0378  0.0566  0.40    0.40
+OFI_TEMA_15s      0.0407  0.0995  7.95    16.98
+Sniper_Composite  0.0199  0.0652  10.80   29.62
+TCI_DEMA_15s      0.0248  0.0576  2.13    3.14
+TCI_EMA_15s       0.0158  0.0380  2.06    3.23
+TCI_Raw           0.0687  0.2110  0.47    0.96
+Vel_Inst          0.0523  0.1101  0.36    0.48
+
+== Horizon 10.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0197  0.0946  0.60    2.67
+Impulse_15s       0.0103  0.0739  0.32    2.10
+OFI_Cubic_15s     0.0052  0.0459  5.59    34.94
+OFI_DEMA_15s      0.0232  0.0735  7.29    18.13
+OFI_DEMA_5s       0.0360  0.0901  6.83    15.11
+OFI_EMA_15s       0.0154  0.0628  6.37    19.18
+OFI_RSI_15s       0.0105  0.0816  3.30    17.13
+OFI_Raw           0.0272  0.0442  0.39    0.40
+OFI_TEMA_15s      0.0281  0.0789  7.46    17.11
+Sniper_Composite  0.0092  0.0522  6.76    30.13
+TCI_DEMA_15s      0.0178  0.0459  2.09    3.19
+TCI_EMA_15s       0.0108  0.0298  1.94    3.22
+TCI_Raw           0.0488  0.1696  0.45    0.98
+Vel_Inst          0.0362  0.0839  0.34    0.46
+
+>>> STUDY: ETHUSDT <<<
+Variants: 1 | Days: 2103
+Progress: 98.9% (2079/2103)
+== Horizon 0.500s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0642  0.1347  0.47    1.14
+Impulse_15s       0.0440  0.1049  0.32    0.87
+OFI_Cubic_15s     0.0264  0.0601  4.74    17.26
+OFI_DEMA_15s      0.0583  0.1043  3.22    10.86
+OFI_DEMA_5s       0.0989  0.1669  3.22    9.48
+OFI_EMA_15s       0.0410  0.0796  3.02    11.45
+OFI_RSI_15s       0.0521  0.1084  3.81    10.78
+OFI_Raw           0.0913  0.1400  0.33    0.40
+OFI_TEMA_15s      0.0712  0.1228  3.29    10.44
+Sniper_Composite  0.0349  0.0661  4.20    15.02
+TCI_DEMA_15s      0.0358  0.0547  1.06    1.96
+TCI_EMA_15s       0.0194  0.0335  0.85    1.84
+TCI_Raw           0.1434  0.3220  0.49    1.00
+Vel_Inst          0.1329  0.2522  0.40    0.53
+
+== Horizon 1.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0603  0.1175  0.56    1.18
+Impulse_15s       0.0416  0.0901  0.38    0.89
+OFI_Cubic_15s     0.0264  0.0502  5.96    17.16
+OFI_DEMA_15s      0.0574  0.0916  3.97    11.37
+OFI_DEMA_5s       0.0944  0.1477  3.86    9.99
+OFI_EMA_15s       0.0411  0.0689  3.80    11.80
+OFI_RSI_15s       0.0498  0.0945  4.58    11.20
+OFI_Raw           0.0850  0.1198  0.38    0.40
+OFI_TEMA_15s      0.0692  0.1084  4.02    10.99
+Sniper_Composite  0.0349  0.0560  5.26    15.16
+TCI_DEMA_15s      0.0376  0.0510  1.40    2.18
+TCI_EMA_15s       0.0215  0.0310  1.19    2.03
+TCI_Raw           0.1262  0.2876  0.55    1.07
+Vel_Inst          0.1164  0.2186  0.44    0.54
+
+== Horizon 2.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0517  0.0953  0.64    1.19
+Impulse_15s       0.0358  0.0712  0.43    0.87
+OFI_Cubic_15s     0.0239  0.0387  7.20    16.43
+OFI_DEMA_15s      0.0516  0.0758  4.77    11.68
+OFI_DEMA_5s       0.0833  0.1226  4.55    10.31
+OFI_EMA_15s       0.0374  0.0558  4.62    11.88
+OFI_RSI_15s       0.0437  0.0766  5.36    11.28
+OFI_Raw           0.0746  0.0989  0.45    0.42
+OFI_TEMA_15s      0.0620  0.0902  4.80    11.35
+Sniper_Composite  0.0314  0.0446  6.33    14.98
+TCI_DEMA_15s      0.0347  0.0440  1.72    2.34
+TCI_EMA_15s       0.0204  0.0261  1.50    2.13
+TCI_Raw           0.1060  0.2445  0.61    1.13
+Vel_Inst          0.0983  0.1819  0.50    0.56
+
+== Horizon 5.000s ==
+FEATURE           IS_IC   OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0266  0.0589  0.49    1.00
+Impulse_15s       0.0145  0.0408  0.26    0.68
+OFI_Cubic_15s     0.0101  0.0196  4.52    11.21
+OFI_DEMA_15s      0.0329  0.0517  4.53    10.75
+OFI_DEMA_5s       0.0556  0.0859  4.53    9.74
+OFI_EMA_15s       0.0225  0.0356  4.16    10.21
+OFI_RSI_15s       0.0250  0.0489  4.58    9.70
+OFI_Raw           0.0497  0.0700  0.45    0.40
+OFI_TEMA_15s      0.0403  0.0627  4.66    10.65
+Sniper_Composite  0.0152  0.0261  4.56    11.84
+TCI_DEMA_15s      0.0234  0.0299  1.74    2.15
+TCI_EMA_15s       0.0129  0.0161  1.43    1.79
+TCI_Raw           0.0696  0.1812  0.60    1.13
+Vel_Inst          0.0629  0.1297  0.48    0.54
+
+== Horizon 10.000s ==
+FEATURE           IS_IC    OOS_IC  IS_BPS  OOS_BPS
+Force_DEMA_15s    0.0097   0.0374  0.24    0.82
+Impulse_15s       -0.0006  0.0224  -0.01   0.48
+OFI_Cubic_15s     -0.0008  0.0105  -0.51   7.80
+OFI_DEMA_15s      0.0193   0.0366  3.55    9.91
+OFI_DEMA_5s       0.0383   0.0626  4.15    9.25
+OFI_EMA_15s       0.0109   0.0237  2.70    8.85
+OFI_RSI_15s       0.0110   0.0324  2.70    8.40
+OFI_Raw           0.0373   0.0504  0.45    0.37
+OFI_TEMA_15s      0.0256   0.0451  3.94    9.97
+Sniper_Composite  0.0022   0.0166  0.87    9.76
+TCI_DEMA_15s      0.0164   0.0214  1.63    2.01
+TCI_EMA_15s       0.0082   0.0107  1.23    1.57
+TCI_Raw           0.0515   0.1353  0.59    1.10
+Vel_Inst          0.0458   0.0938  0.46    0.51
+[study] ALL COMPLETE in 43.2320579s
+
+[sys] Execution Time: 43.2320579s | Mem: 8586 MB
+PS Z:\Benchmarks> 
+package main
+
+import "math"
+
+// --- Interface ---
+
+type Atom interface {
+	Name() string
+	Reset() // Clear state for new day
+	// Update calculates the feature value for the current trade.
+	Update(q, s, p, flow, dt float64) float64
+}
+
+// --- Constants ---
+
+const (
+	InputFlow = iota // Use q * s
+	InputSign        // Use s (Trade Continuation / Direction)
+)
+
+// --- Registry ---
+
+func GetActiveAtoms() []Atom {
+	return []Atom{
+		// --- Baseline ---
+		&RawOFI{},
+		&RawTCI{},
+
+		// --- Standard EMA (Baseline) ---
+		&EMAAtom{NameStr: "OFI_EMA_15s", Tau: 15.0, Input: InputFlow},
+		&EMAAtom{NameStr: "TCI_EMA_15s", Tau: 15.0, Input: InputSign}, // Added TCI variant
+
+		// --- Sniper Math (Lag Reduced) ---
+		&DEMAAtom{NameStr: "OFI_DEMA_15s", Tau: 15.0, Input: InputFlow},
+		&TEMAAtom{NameStr: "OFI_TEMA_15s", Tau: 15.0, Input: InputFlow},
+		&DEMAAtom{NameStr: "OFI_DEMA_5s", Tau: 5.0, Input: InputFlow},
+
+		// --- Sign-Based Sniper (New Capability!) ---
+		&DEMAAtom{NameStr: "TCI_DEMA_15s", Tau: 15.0, Input: InputSign},
+
+		// --- Advanced / Composite ---
+		&RSIAtom{NameStr: "OFI_RSI_15s", Tau: 15.0, Input: InputFlow},
+		&CubicAtom{NameStr: "OFI_Cubic_15s", Tau: 15.0, Input: InputFlow},
+
+		// --- Volatility / Force ---
+		&ImpulseAtom{NameStr: "Impulse_15s", Tau: 15.0, Input: InputFlow},  // Flow * Speed
+		&ForceAtom{NameStr: "Force_DEMA_15s", Tau: 15.0, Input: InputFlow}, // DEMA * Speed
+		&InstVelAtom{},
+
+		// --- Experimental ---
+		// Composite mixing TEMA and Cubic (both using InputFlow by default)
+		&CompositeAtom{
+			NameStr: "Sniper_Composite",
+			Tau:     15.0,
+			Input:   InputFlow,
+			WeightA: 0.5,
+			WeightB: 0.5,
+		},
+	}
+}
+
+// --- Helper ---
+
+// resolveInput centralizes the Flow vs Sign logic.
+// Inlined by compiler for zero overhead.
+func resolveInput(mode int, flow, s float64) float64 {
+	if mode == InputSign {
+		return s
+	}
+	return flow
+}
+
+// --- Implementations ---
+
+// 1. Raw OFI
+type RawOFI struct{}
+
+func (r *RawOFI) Name() string                             { return "OFI_Raw" }
+func (r *RawOFI) Reset()                                   {}
+func (r *RawOFI) Update(q, s, p, flow, dt float64) float64 { return flow }
+
+// 2. Raw TCI
+type RawTCI struct{}
+
+func (r *RawTCI) Name() string                             { return "TCI_Raw" }
+func (r *RawTCI) Reset()                                   {}
+func (r *RawTCI) Update(q, s, p, flow, dt float64) float64 { return s }
+
+// 3. Standard EMA
+type EMAAtom struct {
+	NameStr string
+	Tau     float64
+	Input   int
+	val     float64
+}
+
+func (a *EMAAtom) Name() string { return a.NameStr }
+func (a *EMAAtom) Reset()       { a.val = 0 }
+func (a *EMAAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+	a.val += alpha * (x - a.val)
+	return a.val
+}
+
+// 4. DEMA (Double EMA)
+type DEMAAtom struct {
+	NameStr string
+	Tau     float64
+	Input   int
+	e1, e2  float64
+}
+
+func (a *DEMAAtom) Name() string { return a.NameStr }
+func (a *DEMAAtom) Reset()       { a.e1 = 0; a.e2 = 0 }
+func (a *DEMAAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+	a.e1 += alpha * (x - a.e1)
+	a.e2 += alpha * (a.e1 - a.e2)
+	return 2*a.e1 - a.e2
+}
+
+// 5. TEMA (Triple EMA)
+type TEMAAtom struct {
+	NameStr    string
+	Tau        float64
+	Input      int
+	e1, e2, e3 float64
+}
+
+func (a *TEMAAtom) Name() string { return a.NameStr }
+func (a *TEMAAtom) Reset()       { a.e1 = 0; a.e2 = 0; a.e3 = 0 }
+func (a *TEMAAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+	a.e1 += alpha * (x - a.e1)
+	a.e2 += alpha * (a.e1 - a.e2)
+	a.e3 += alpha * (a.e2 - a.e3)
+	return 3*a.e1 - 3*a.e2 + a.e3
+}
+
+// 6. RSI (Relative Strength)
+type RSIAtom struct {
+	NameStr  string
+	Tau      float64
+	Input    int
+	up, down float64
+}
+
+func (a *RSIAtom) Name() string { return a.NameStr }
+func (a *RSIAtom) Reset()       { a.up = 0; a.down = 0 }
+func (a *RSIAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+
+	u, d := 0.0, 0.0
+	if x > 0 {
+		u = x
+	} else {
+		d = -x
+	}
+
+	a.up += alpha * (u - a.up)
+	a.down += alpha * (d - a.down)
+	sum := a.up + a.down
+
+	if sum < 1e-9 {
+		return 0.0
+	}
+	// Scaled -1 to 1
+	return 2.0*(a.up/sum) - 1.0
+}
+
+// 7. Cubic (Non-Linear)
+type CubicAtom struct {
+	NameStr string
+	Tau     float64
+	Input   int
+	val     float64
+}
+
+func (a *CubicAtom) Name() string { return a.NameStr }
+func (a *CubicAtom) Reset()       { a.val = 0 }
+func (a *CubicAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+
+	// Track EMA of Cube
+	x3 := x * x * x
+	a.val += alpha * (x3 - a.val)
+
+	// Return Cube Root to linearize scale for downstream tasks
+	if a.val > 0 {
+		return math.Cbrt(a.val)
+	}
+	return -math.Cbrt(-a.val)
+}
+
+// 8. Impulse (EMA * Speed)
+type ImpulseAtom struct {
+	NameStr string
+	Tau     float64
+	Input   int
+	val     float64
+}
+
+func (a *ImpulseAtom) Name() string { return a.NameStr }
+func (a *ImpulseAtom) Reset()       { a.val = 0 }
+func (a *ImpulseAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+	a.val += alpha * (x - a.val)
+
+	// Speed Cap
+	speed := 1.0 / dt // dt is guaranteed >= 1e-4 by build.go
+	if speed > 100 {
+		speed = 100
+	}
+
+	return a.val * speed
+}
+
+// 9. Force (DEMA * Speed)
+type ForceAtom struct {
+	NameStr string
+	Tau     float64
+	Input   int
+	e1, e2  float64
+}
+
+func (a *ForceAtom) Name() string { return a.NameStr }
+func (a *ForceAtom) Reset()       { a.e1 = 0; a.e2 = 0 }
+func (a *ForceAtom) Update(q, s, p, flow, dt float64) float64 {
+	x := resolveInput(a.Input, flow, s)
+	alpha := 1.0 - math.Exp(-dt/a.Tau)
+
+	a.e1 += alpha * (x - a.e1)
+	a.e2 += alpha * (a.e1 - a.e2)
+	dema := 2*a.e1 - a.e2
+
+	speed := 1.0 / dt
+	if speed > 100 {
+		speed = 100
+	}
+
+	return dema * speed
+}
+
+// 10. Instant Velocity
+type InstVelAtom struct{}
+
+func (a *InstVelAtom) Name() string { return "Vel_Inst" }
+func (a *InstVelAtom) Reset()       {}
+func (a *InstVelAtom) Update(q, s, p, flow, dt float64) float64 {
+	// Redundant check removed as requested
+	speed := 1.0 / dt
+	if speed > 100 {
+		speed = 100
+	}
+	return flow * speed
+}
+
+// 11. Composite (TEMA + Cubic)
+type CompositeAtom struct {
+	NameStr          string
+	Tau              float64
+	Input            int
+	WeightA, WeightB float64
+	tema             TEMAAtom
+	cubic            CubicAtom
+}
+
+func (a *CompositeAtom) Name() string { return a.NameStr }
+func (a *CompositeAtom) Reset() {
+	// Propagate configuration to children
+	a.tema.Tau = a.Tau
+	a.tema.Input = a.Input
+	a.tema.Reset()
+
+	a.cubic.Tau = a.Tau
+	a.cubic.Input = a.Input
+	a.cubic.Reset()
+}
+func (a *CompositeAtom) Update(q, s, p, flow, dt float64) float64 {
+	v1 := a.tema.Update(q, s, p, flow, dt)
+	v2 := a.cubic.Update(q, s, p, flow, dt)
+	return a.WeightA*v1 + a.WeightB*v2
+}
